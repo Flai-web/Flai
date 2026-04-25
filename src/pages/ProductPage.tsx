@@ -387,7 +387,7 @@ const ProductPage: React.FC = () => {
                     contentKey="product-page-editing-description"
                     as="p"
                     className="text-neutral-300 text-sm mb-2"
-                    fallback="Få redigering af dine optagelser, herunder klipning og baggrundsmusik. Farvekorrigering er gratis."
+                    fallback="Få redigering af dine optagelser, herunder klipning, effekter, lydeffekter og baggrundsmusik."
                   />
                   <EditableContent
                     contentKey="product-page-editing-price"

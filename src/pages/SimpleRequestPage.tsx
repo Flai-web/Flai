@@ -570,7 +570,7 @@ const SimpleRequestPage: React.FC = () => {
                       <label htmlFor="editing" className="font-medium cursor-pointer text-white">
                         <EditableContent contentKey="simple-editing-option-title" fallback="Redigering" />
                       </label>
-                      <EditableContent contentKey="simple-editing-description" as="p" className="text-neutral-300 mt-1" fallback="Få redigering af dine optagelser, herunder klipning og baggrundsmusik. Farvekorrigering er gratis." />
+                      <EditableContent contentKey="simple-editing-description" as="p" className="text-neutral-300 mt-1" fallback="Få redigering af dine optagelser, herunder klipning, effekter, lydeffekter og baggrundsmusik." />
                       <EditableContent contentKey="simple-editing-price" as="p" className="text-neutral-300 font-semibold mt-2" fallback="+100 kr" />
                     </div>
                   </div>

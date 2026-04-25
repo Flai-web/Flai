@@ -673,7 +673,7 @@ const BookingPage: React.FC = () => {
                     contentKey="booking-editing-option-description"
                     as="p"
                     className="text-neutral-300 mt-1"
-                    fallback="Få redigering af dine optagelser, herunder klipning og baggrundsmusik. Farvekorrigering er gratis."
+                    fallback="Få redigering af dine optagelser, herunder klipning, effekter, lydeffekter og baggrundsmusik."
                   />
                   <EditableContent
                     contentKey="booking-editing-option-price"
