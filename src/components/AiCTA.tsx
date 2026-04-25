@@ -11,7 +11,6 @@ import { supabase } from '../utils/supabase';
 import { Product } from '../types';
 
 import { DEPLOYED_HOME_SECTIONS } from '../pages/HomePage';
-
 const GEMINI_API_KEY = 'AIzaSyC2DZXk4Di_Jt-KzIYpyejESm1CWrFhFq0';
 const GROQ_API_KEY   = import.meta.env.VITE_GROQ_API_KEY ;
 
@@ -90,6 +89,7 @@ async function callAI(systemPrompt: string, history: HistoryEntry[]): Promise<st
 
 type Intent = 'products' | 'portfolio' | 'coverage' | 'general' | 'reasoning';
 
+// --- FIXED: Added rawJson to AIDecision ---
 interface AIDecision {
   intent: Intent;
   address?: string | null;
@@ -98,6 +98,7 @@ interface AIDecision {
   showProductsAfter?: boolean;
   portfolioRows?: number | null;
   portfolioIds?: string[] | null;
+  rawJson: string; 
 }
 
 function keywordFallback(): AIDecision {
@@ -105,6 +106,7 @@ function keywordFallback(): AIDecision {
     intent: 'general',
     address: null,
     text: 'Kontakt os på fb@flai.dk eller +45 27 29 21 99 for svar på dit spørgsmål.',
+    rawJson: '{"intent":"general","address":null,"text":"Kontakt os på fb@flai.dk eller +45 27 29 21 99 for svar på dit spørgsmål.","productIds":null,"showProductsAfter":false,"portfolioRows":null,"portfolioIds":null}'
   };
 }
 
@@ -126,7 +128,6 @@ const SKIP_PREFIXES = ['admin-', 'deploy-', 'auth-', 'video-manager', 'address-z
 
 const UI_NOISE_SUFFIXES = ['-btn', '-button', '-label', '-placeholder', '-cta', '-link', '-nav', '-tag', '-badge'];
 const UI_NOISE_EXACT    = new Set(['submit', 'cancel', 'close', 'open', 'back', 'next', 'send', 'loading']);
-
 function isUINoiseKey(key: string): boolean {
   if (UI_NOISE_EXACT.has(key)) return true;
   if (UI_NOISE_SUFFIXES.some((s) => key.endsWith(s))) return true;
@@ -156,7 +157,6 @@ function buildIntentPrompt(
     if (fallback.startsWith('/')) return;
     if (fallback && fallback.trim().length > 3) merged.set(key, fallback.trim());
   });
-
   const grouped = new Map<string, Array<[string, string]>>();
   Array.from(merged.entries())
     .filter(([k]) => !k.includes('meta') && !k.includes('seo'))
@@ -165,7 +165,6 @@ function buildIntentPrompt(
       if (!grouped.has(prefix)) grouped.set(prefix, []);
       grouped.get(prefix)!.push([k, v]);
     });
-
   const contentLines: string[] = [];
   grouped.forEach((entries, prefix) => {
     contentLines.push(`\n  [${prefix.toUpperCase()}]`);
@@ -173,15 +172,12 @@ function buildIntentPrompt(
       contentLines.push(`  ${k}: ${v}`);
     });
   });
-
   const zoneLines = (addressZones ?? [])
     .filter((z: any) => z.is_active)
     .map((z: any) => `  - ${z.name}: center="${z.center_address}", radius=${z.radius_km}km`);
-
   const productList = products.length
     ? products.map((p) => `  id="${p.id}" name="${p.name}" price="${(p as any).price ?? 'se hjemmeside'}" desc="${p.description ?? ''}"`).join('\n')
     : '  (ingen produkter)';
-
   const portfolioList = portfolioItems.length
     ? portfolioItems
         .sort((a, b) => (b.array ?? 50) - (a.array ?? 50))
@@ -197,24 +193,21 @@ function buildIntentPrompt(
     .map(summariseSection)
     .filter(Boolean)
     .join(', ');
-
   return `Du er Flai AI – en intelligent, venlig assistent for Flai, et dansk dronefirma specialiseret i luftfoto og -video.
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DIN TÆNKEMÅDE – LÆS DETTE GRUNDIGT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Du skal tænke og svare som en RIGTIG intelligent assistent – ikke som en simpel chatbot der bare genkender nøgleord.
 Tænk som ChatGPT: grundig, nuanceret, hjælpsom, med dybde i svarene.
-
 TRIN 1 – LÆS FLAIS DATA FØRSTE (ALTID):
 Før du bruger din generelle viden, SKAL du gennemlæse og aktivt bruge:
   • HJEMMESIDEINDHOLDET nedenfor (mission, værdier, tilgang, ejeren Felix, udstyr, etc.)
   • PRODUKTLISTEN med priser og beskrivelser
   • DÆKNINGSZONER
   • HJEMMESIDENS SEKTIONER
-Disse data er din PRIMÆRE kilde. Brug dem aktivt i dit svar – ikke bare som baggrundsviden.
-
+Disse data er din PRIMÆRE kilde.
+Brug dem aktivt i dit svar – ikke bare som baggrundsviden.
 TRIN 2 – KOMBINER MED DIN GENERELLE VIDEN:
 Når du har læst Flais data, kombiner det med din generelle viden om:
   • Dansk geografi, byer, afstande
@@ -258,21 +251,18 @@ PORTFOLIO-REGLER
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Du har adgang til den fulde liste af portfolio items nedenfor (under PORTFOLIO ITEMS).
 Hvert item har: id, title, type (billede/video), tags og description.
-
 • portfolioRows: Vælg antal rækker der passer til konteksten (2 items pr. række).
-  Standard er 5 rækker desktop / 4 rækker mobil (sæt null for standard).
-  Du KAN sætte fx 3 for en hurtig preview, eller 8 for et bredt udvalg.
-
+Standard er 5 rækker desktop / 4 rækker mobil (sæt null for standard).
+Du KAN sætte fx 3 for en hurtig preview, eller 8 for et bredt udvalg.
 • portfolioIds: Brug dette til at filtrere relevante items når brugeren spørger om
   NOGET SPECIFIKT – fx "vis mig jeres drone-videoer", "boligfotos", "erhvervsbilleder".
-  Gennemlæs portfolio-listen og vælg KUN items der matcher brugerens spørgsmål baseret
-  på title, type og tags. Sæt de relevante IDs i portfolioIds.
+Gennemlæs portfolio-listen og vælg KUN items der matcher brugerens spørgsmål baseret
+  på title, type og tags.
+Sæt de relevante IDs i portfolioIds.
   
   Hvis brugeren bare vil "se jeres arbejde" / "vis portfolio" uden specifik forespørgsel:
   sæt portfolioIds til null – lad systemet vise i standard rækkefølge.
-
-  ALDRIG opfind IDs – brug kun IDs fra PORTFOLIO ITEMS listen nedenfor.
-
+ALDRIG opfind IDs – brug kun IDs fra PORTFOLIO ITEMS listen nedenfor.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 KRITISKE REGLER
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -281,7 +271,7 @@ KRITISKE REGLER
 ③ Hvis en specifik information IKKE fremgår af data: sig "det ved jeg ikke præcist" og henvis til kontakt — opfind det ALDRIG
 ④ Brug din generelle viden om Danmark frit (geografi, byer, afstande, kultur)
 ③ coverage-intent: sæt den efterspurgte by i "address" – systemet tjekker dækning selv.
-   ALDRIG spekuler om en adresse er dækket i dit "text"-svar.
+ALDRIG spekuler om en adresse er dækket i dit "text"-svar.
 ④ Opfind ALDRIG kontaktinfo eller priser der ikke fremgår af data nedenfor
 ⑤ productIds: KUN IDs fra produktlisten – aldrig opfundne IDs
 ⑤ Brug kun produkt navne i din forklaring.
@@ -290,7 +280,6 @@ KRITISKE REGLER
 ⑦ Svar MED SUBSTANS – undgå 1-linje svar til spørgsmål der fortjener mere
 ⑦ Hvis du ikke kunne svare på et tidligere spøgsmål skal du ignorere det
 svar og forsøge at svar så godt som så muligt på brugerens svar.
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FÅ-SKUD EKSEMPLER (følg reasoning-dybden)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -358,16 +347,13 @@ async function detectIntentWithAI(
 ): Promise<AIDecision> {
   const systemPrompt = buildIntentPrompt(products, addressZones, siteContent, homeSections, portfolioItems);
   const history: HistoryEntry[] = [...conversationHistory, { role: 'user', content: userMessage }];
-
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const raw = await callAI(systemPrompt, history);
-
       const jsonMatch = raw
         .replace(/```[\w]*\n?/g, '')
         .trim()
         .match(/\{[\s\S]*\}/);
-
       if (!jsonMatch) throw new Error('No JSON found');
 
       const parsed = JSON.parse(jsonMatch[0]);
@@ -380,6 +366,7 @@ async function detectIntentWithAI(
         throw new Error(`Invalid productIds: ${typeof productIds}`);
       }
 
+      // --- FIXED: Included rawJson in the return payload ---
       return {
         intent: parsed.intent as Intent,
         address: typeof parsed.address === 'string' && parsed.address.trim() ? parsed.address.trim() : null,
@@ -388,6 +375,7 @@ async function detectIntentWithAI(
         showProductsAfter: parsed.showProductsAfter === true,
         portfolioRows: typeof parsed.portfolioRows === 'number' ? Math.max(1, Math.round(parsed.portfolioRows)) : null,
         portfolioIds: Array.isArray(parsed.portfolioIds) ? parsed.portfolioIds : null,
+        rawJson: jsonMatch[0],
       };
     } catch {
       if (attempt === 1) return keywordFallback();
@@ -449,14 +437,11 @@ const PortfolioGrid: React.FC<{ images: any[]; portfolioRows?: number | null; po
   portfolioIds,
 }) => {
   const navigate = useNavigate();
-
   let filtered = portfolioIds && portfolioIds.length > 0
     ? portfolioIds.map((id) => images.find((img) => String(img.id) === String(id))).filter(Boolean)
     : [...images].sort((a, b) => (b.array ?? 50) - (a.array ?? 50));
-
   const desktopItems = portfolioRows != null ? portfolioRows * ITEMS_PER_ROW : DEFAULT_ROWS_DESKTOP * ITEMS_PER_ROW;
   const mobileItems  = portfolioRows != null ? portfolioRows * ITEMS_PER_ROW : DEFAULT_ROWS_MOBILE  * ITEMS_PER_ROW;
-
   return (
     <div className="w-full">
       <style>{`
@@ -561,14 +546,12 @@ const AiCTA: React.FC = () => {
     getContent, siteContent, addressZones, isAddressZonesLoaded, refreshAddressZones,
     homeSections: dbHomeSections, isHomeSectionsLoaded, refreshHomeSections,
   } = useData();
-
   const [messages, setMessages]               = useState<Message[]>([]);
   const [conversationHistory, setConversationHistory] = useState<HistoryEntry[]>([]);
   const [input, setInput]                     = useState('');
   const [loading, setLoading]                 = useState(false);
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [expanded, setExpanded]               = useState(false);
-
   const inputRef    = useRef<HTMLInputElement>(null);
   const msgsEndRef  = useRef<HTMLDivElement>(null);
   const msgsContRef = useRef<HTMLDivElement>(null);
@@ -585,7 +568,8 @@ const AiCTA: React.FC = () => {
   useEffect(() => {
     if (!isAddressZonesLoaded) refreshAddressZones();
     if (!isHomeSectionsLoaded) refreshHomeSections();
-  }, []); // eslint-disable-line
+  }, []);
+  // eslint-disable-line
 
   const homeSections = mergeHomeSections(dbHomeSections, isHomeSectionsLoaded);
 
@@ -626,15 +610,17 @@ const AiCTA: React.FC = () => {
       const sorted = allProducts.sort((a, b) => (b.array ?? 50) - (a.array ?? 50));
 
       const allPortfolio = await fetchPortfolioDirect();
-
-      const { intent, address, text, productIds, showProductsAfter, portfolioRows, portfolioIds } = await detectIntentWithAI(
+      
+      // --- FIXED: Destructured rawJson here ---
+      const { intent, address, text, productIds, showProductsAfter, portfolioRows, portfolioIds, rawJson } = await detectIntentWithAI(
         q, sorted, getContent, addressZones, siteContent, homeSections, conversationHistory, allPortfolio,
       );
 
+      // --- FIXED: Passed rawJson back into the assistant history so Gemini keeps outputting JSON ---
       setConversationHistory((prev) => [
         ...prev,
         { role: 'user', content: q },
-        { role: 'assistant', content: text },
+        { role: 'assistant', content: rawJson }, 
       ]);
 
       if (intent === 'products') {
@@ -712,14 +698,12 @@ const AiCTA: React.FC = () => {
           {msg.text}
         </div>
       );
-
     if (msg.type === 'ai')
       return (
         <div key={msg.id} className="self-start text-neutral-100 px-4 py-3"
           style={{ background: 'var(--neutral-800,#262626)', borderRadius: '2px 12px 12px 12px', border: '1px solid rgba(255,255,255,0.08)', fontSize: '.875rem', lineHeight: 1.7, maxWidth: '88%', textAlign: 'left' }}
           dangerouslySetInnerHTML={{ __html: formatAI(msg.text ?? '') }} />
       );
-
     if (msg.type === 'products' && msg.products?.length)
       return (
         <div key={msg.id} className="w-full">
@@ -727,13 +711,13 @@ const AiCTA: React.FC = () => {
           <div className="aicta-products-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
             {msg.products.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
-          <button className="btn-secondary w-full mt-3 flex items-center justify-center gap-2"
+          <button 
+            className="btn-secondary w-full mt-3 flex items-center justify-center gap-2"
             style={{ fontSize: '.8rem', padding: '8px' }} onClick={() => navigate('/produkter')}>
             {msg.isPersonalised ? 'Se alle produkter' : 'Se produkter på hjemmesiden'} <ArrowRight size={13} />
           </button>
         </div>
       );
-
     if (msg.type === 'portfolio' && msg.images?.length)
       return (
         <PortfolioGrid
@@ -743,7 +727,6 @@ const AiCTA: React.FC = () => {
           portfolioIds={msg.portfolioIds}
         />
       );
-
     if (msg.type === 'coverage-form') return <CoverageForm key={msg.id} onCheck={handleCoverageCheck} loading={coverageLoading} />;
     if (msg.type === 'coverage-result' && msg.coverageResult) return <CoverageResult key={msg.id} result={msg.coverageResult} />;
     return null;
@@ -789,7 +772,8 @@ const AiCTA: React.FC = () => {
 
           <div className="flex items-center justify-between px-4 py-3"
             style={{ background: 'var(--neutral-800,#262626)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <span className="flex items-center gap-2 font-bold uppercase tracking-widest" style={{ fontSize: '.7rem', color: 'var(--secondary)' }}>
+            <span className="flex items-center gap-2 font-bold uppercase tracking-widest" 
+              style={{ fontSize: '.7rem', color: 'var(--secondary)' }}>
               <Sparkles size={11} /> Flai AI
             </span>
             <button style={{ background: 'none', border: 'none', color: 'var(--neutral-500,#737373)', cursor: 'pointer', borderRadius: 6, padding: 4 }}
