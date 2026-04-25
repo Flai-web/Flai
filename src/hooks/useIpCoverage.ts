@@ -66,6 +66,7 @@ async function isCoordinateWithinRange(lat: number, lon: number): Promise<boolea
 }
 
 async function fetchIpLocation(): Promise<IpLocation> {
+  // 1. Check Session Storage first to minimize API calls
   const cachedLocation = sessionStorage.getItem('user_ip_location');
   if (cachedLocation) {
     try {
@@ -83,54 +84,31 @@ async function fetchIpLocation(): Promise<IpLocation> {
     return loc;
   };
 
-  // Primary: ipgeolocation.io — best accuracy (~200m), 30k req/month free
   try {
-    const res = await fetchWithTimeout(
-      'https://api.ipgeolocation.io/ipgeo?apiKey=c8e8ac2b70214f34a563fdd79a7ce297&fields=city,latitude,longitude',
-      4000
-    );
-    if (res.ok) {
-      const d = await res.json();
-      if (d.city && d.latitude != null && d.longitude != null) {
-        return saveAndReturn({ lat: parseFloat(d.latitude), lon: parseFloat(d.longitude), city: d.city });
-      }
+    // IMPORTANT: Free tier only supports HTTP. 
+    // If your site uses HTTPS, replace this URL with your HTTPS Pro endpoint.
+    // e.g., 'https://pro.ip-api.com/json/?key=YOUR_API_KEY&fields=status,message,city,lat,lon'
+    const endpoint = 'http://ip-api.com/json/?fields=status,message,city,lat,lon';
+    
+    // Increased timeout slightly to ensure it completes
+    const res = await fetchWithTimeout(endpoint, 5000); 
+    
+    if (!res.ok) {
+      throw new Error(`HTTP Error: ${res.status}`);
     }
-  } catch { }
 
-  // Fallback 1: ip-api.com — MaxMind GeoIP2 City, ~1–5 km, no key needed
-  try {
-    const res = await fetchWithTimeout('http://ip-api.com/json/?fields=status,city,lat,lon', 4000);
-    if (res.ok) {
-      const d = await res.json();
-      if (d.status === 'success' && d.city && d.lat != null && d.lon != null) {
-        return saveAndReturn({ lat: d.lat, lon: d.lon, city: d.city });
-      }
+    const d = await res.json();
+
+    if (d.status === 'success' && d.city && d.lat != null && d.lon != null) {
+      return saveAndReturn({ lat: d.lat, lon: d.lon, city: d.city });
+    } else {
+      // The API returns a "message" field if status is "fail" (e.g., rate limited, private IP)
+      throw new Error(`ip-api error: ${d.message || 'Invalid data returned'}`);
     }
-  } catch { }
-
-  // Fallback 2: ipinfo.io — ~5–20 km, no key needed
-  try {
-    const res = await fetchWithTimeout('https://ipinfo.io/json', 4000);
-    if (res.ok) {
-      const d = await res.json();
-      if (d.city && d.loc) {
-        const [lat, lon] = d.loc.split(',').map(Number);
-        if (!isNaN(lat) && !isNaN(lon)) return saveAndReturn({ lat, lon, city: d.city });
-      }
-    }
-  } catch { }
-
-  // Fallback 3: ipwho.is — last resort
-  try {
-    const res = await fetchWithTimeout('https://ipwho.is/', 4000);
-    if (res.ok) {
-      const d = await res.json();
-      if (d.success && d.city && d.latitude != null && d.longitude != null)
-        return saveAndReturn({ lat: d.latitude, lon: d.longitude, city: d.city });
-    }
-  } catch { }
-
-  throw new Error('All IP geolocation APIs failed or rate limited');
+  } catch (err) {
+    console.error('IP Geolocation failed:', err);
+    throw new Error('Failed to determine location via IP');
+  }
 }
 
 export function useIpCoverage() {
