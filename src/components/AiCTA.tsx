@@ -548,6 +548,7 @@ const AiCTA: React.FC = () => {
   } = useData();
   const [messages, setMessages]               = useState<Message[]>([]);
   const [conversationHistory, setConversationHistory] = useState<HistoryEntry[]>([]);
+  const convHistoryRef                        = useRef<HistoryEntry[]>([]);
   const [input, setInput]                     = useState('');
   const [loading, setLoading]                 = useState(false);
   const [coverageLoading, setCoverageLoading] = useState(false);
@@ -613,15 +614,17 @@ const AiCTA: React.FC = () => {
       
       // --- FIXED: Destructured rawJson here ---
       const { intent, address, text, productIds, showProductsAfter, portfolioRows, portfolioIds, rawJson } = await detectIntentWithAI(
-        q, sorted, getContent, addressZones, siteContent, homeSections, conversationHistory, allPortfolio,
+        q, sorted, getContent, addressZones, siteContent, homeSections, convHistoryRef.current, allPortfolio,
       );
 
-      // --- FIXED: Passed rawJson back into the assistant history so Gemini keeps outputting JSON ---
-      setConversationHistory((prev) => [
-        ...prev,
+      // --- FIXED: Update ref synchronously so next question always has full history ---
+      const newHistory: HistoryEntry[] = [
+        ...convHistoryRef.current,
         { role: 'user', content: q },
-        { role: 'assistant', content: rawJson }, 
-      ]);
+        { role: 'assistant', content: rawJson },
+      ];
+      convHistoryRef.current = newHistory;
+      setConversationHistory(newHistory);
 
       if (intent === 'products') {
         let toShow: Product[];
@@ -777,7 +780,7 @@ const AiCTA: React.FC = () => {
               <Sparkles size={11} /> Flai AI
             </span>
             <button style={{ background: 'none', border: 'none', color: 'var(--neutral-500,#737373)', cursor: 'pointer', borderRadius: 6, padding: 4 }}
-              title="Luk" onClick={() => { setExpanded(false); setMessages([]); setConversationHistory([]); }}>
+              title="Luk" onClick={() => { setExpanded(false); setMessages([]); setConversationHistory([]); convHistoryRef.current = []; }}>
               <X size={15} />
             </button>
           </div>
