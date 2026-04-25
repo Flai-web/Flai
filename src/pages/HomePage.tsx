@@ -1003,54 +1003,6 @@ const HomePage: React.FC = () => {
           </button>
         </div>
 
-        {/* Coverage label — inside hero, visible without scrolling */}
-        {(coverageLoading || cityName) && (
-          <div className="mt-8 mb-3 sm:mb-0 flex items-center justify-center gap-2.5">
-            {coverageLoading ? (
-              /* Loading state: pulsing yellow dot + bouncing dots where city name will be */
-              <>
-                <span className="relative flex h-3 w-3 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-400" />
-                </span>
-                <MapPin size={18} className="text-neutral-400 flex-shrink-0" />
-                <span className="text-lg text-neutral-400 drop-shadow flex items-center gap-1">
-                  Vi dækker
-                  <span className="inline-flex gap-0.5 ml-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </span>
-                </span>
-              </>
-            ) : covered ? (
-              /* Covered state: pulsing green dot */
-              <>
-                <span className="relative flex h-3 w-3 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-400" />
-                </span>
-                <MapPin size={18} className="text-primary flex-shrink-0" />
-                <span className="text-lg text-neutral-200 drop-shadow">
-                  <EditableContent contentKey="coverage-bar-prefix" fallback="Vi dækker" />{' '}
-                  <span className="font-bold text-white">{cityName}</span>
-                </span>
-              </>
-            ) : (
-              /* Not covered state: static red dot */
-              <>
-                <span className="relative flex h-3 w-3 flex-shrink-0">
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                </span>
-                <MapPin size={18} className="text-red-400 flex-shrink-0" />
-                <span className="text-lg text-neutral-300 drop-shadow">
-                  <EditableContent contentKey="coverage-bar-no-coverage" fallback="Vi dækker ikke" />{' '}
-                  <span className="font-bold text-white">{cityName}</span>
-                </span>
-              </>
-            )}
-          </div>
-        )}
       </HeroVideoSection>
 
       {homeSections.filter(s => s.is_active).map((section, index) => {
