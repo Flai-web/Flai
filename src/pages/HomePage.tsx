@@ -927,7 +927,7 @@ const HomePage: React.FC = () => {
       })}
 
       {homeSections.length === 0 && DEPLOYED_HOME_SECTIONS.length === 0 && isSiteContentLoaded && (
-        <section className="py-20 bg-neutral-800">
+        <section className="py-10 md:py-20 bg-neutral-800">
           <div className="container">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
               <div>
@@ -947,7 +947,7 @@ const HomePage: React.FC = () => {
         </section>
       )}
                                                   
-      <section className="py-20 bg-neutral-800">
+      <section className="py-10 md:py-20 bg-neutral-800">
         <div className="container text-center">
           <EditableContent contentKey="cta-title" as="h2" className="text-3xl md:text-4xl font-bold mb-8 text-white" fallback="Klar til en ny verden fra oven?" />
 
