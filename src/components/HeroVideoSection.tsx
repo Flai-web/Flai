@@ -280,7 +280,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   return (
     <section
-      className={`relative h-screen w-full overflow-hidden flex items-center justify-center ${className}`}
+      className={`relative h-screen w-full overflow-hidden flex flex-col ${className}`}
       style={{ backgroundColor: '#111' }}
     >
       {!skipVideo && (
@@ -338,8 +338,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         }}
       />
 
-      <div className="relative text-center w-full" style={{ zIndex: 3 }}>
-        <div className="max-w-3xl mx-auto px-4">{children}</div>
+      <div className="relative w-full h-full" style={{ zIndex: 3 }}>
+        {children}
       </div>
     </section>
   )
