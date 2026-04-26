@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../utils/supabase';
-import { ThumbsUp, ThumbsDown, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, ChevronDown, ChevronUp } from 'lucide-react';
 import EditableContent from '../components/EditableContent';
 import SEO from '../components/SEO';
 import { useData } from '../contexts/DataContext';
-import toast from 'react-hot-toast';
-import Comments from '../components/Comments';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { supabase } from '../utils/supabase';
 
 // Portfolio-specific skeleton that matches actual portfolio card dimensions
 const PortfolioCardSkeleton: React.FC = () => (
@@ -17,11 +14,8 @@ const PortfolioCardSkeleton: React.FC = () => (
     </div>
     <div className="p-4">
       <SkeletonLoader height="1.25rem" className="mb-1" width="60%" />
-      <SkeletonLoader height="0.875rem" className="mb-3" width="40%" />
-      <div className="flex items-center space-x-4">
-        <SkeletonLoader width="60px" height="1.25rem" />
-        <SkeletonLoader width="60px" height="1.25rem" />
-      </div>
+      <SkeletonLoader height="0.875rem" className="mb-2" width="40%" />
+      <SkeletonLoader height="0.875rem" width="80%" />
     </div>
   </div>
 );
@@ -33,9 +27,7 @@ interface Bundle {
 }
 
 const PortfolioPage: React.FC = () => {
-  const { user } = useAuth();
-  const { portfolioImages, refreshPortfolio, isPortfolioLoaded, getContent } = useData();
-  const [loading, setLoading] = useState(false);
+  const { portfolioImages, isPortfolioLoaded, getContent } = useData();
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
 
@@ -64,9 +56,7 @@ const PortfolioPage: React.FC = () => {
     });
   };
 
-  // âââ Pure array-based ordering â no randomness ââââââââââââââââââââââââââââââ
-  // Portfolio is a deliberate showcase. Higher array value = always shown first.
-  // Order is fully deterministic and only changes when array values are updated.
+  // ─── Pure array-based ordering ─────────────────────────────────────────────
   const imageKey = portfolioImages.map(i => `${i.id}:${i.array ?? 50}`).join(',');
 
   const imageScores = useMemo(() => {
@@ -79,7 +69,6 @@ const PortfolioPage: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageKey]);
 
-  // Sort all images by their weighted score (descending)
   const sortedImages = useMemo(() => {
     return [...portfolioImages].sort((a, b) => {
       const scoreA = imageScores.get(a.id) ?? 0;
@@ -88,55 +77,7 @@ const PortfolioPage: React.FC = () => {
     });
   }, [portfolioImages, imageScores]);
 
-  // âââ Reactions ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-  const handleReaction = async (imageId: string, reaction: 'like' | 'dislike') => {
-    if (loading) return;
-    try {
-      setLoading(true);
-      const image = portfolioImages.find(img => img.id === imageId);
-      if (!image) return;
-
-      if (user) {
-        if (image.user_reaction === reaction) {
-          await supabase.from('portfolio_reactions').delete()
-            .eq('image_id', imageId).eq('user_id', user.id);
-        } else {
-          const { data: existing } = await supabase.from('portfolio_reactions').select('*')
-            .eq('image_id', imageId).eq('user_id', user.id).maybeSingle();
-          if (existing) {
-            await supabase.from('portfolio_reactions').update({ reaction }).eq('id', existing.id);
-          } else {
-            await supabase.from('portfolio_reactions').insert({ image_id: imageId, user_id: user.id, reaction });
-          }
-        }
-      } else {
-        let anonymousId = localStorage.getItem('anonymous_user_id');
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!anonymousId || !uuidRegex.test(anonymousId)) {
-          anonymousId = crypto.randomUUID();
-          localStorage.setItem('anonymous_user_id', anonymousId);
-        }
-        const { data: existing } = await supabase.from('portfolio_reactions').select('*')
-          .eq('image_id', imageId).eq('anonymous_id', anonymousId).maybeSingle();
-        if (existing && existing.reaction === reaction) {
-          await supabase.from('portfolio_reactions').delete()
-            .eq('image_id', imageId).eq('anonymous_id', anonymousId);
-        } else if (existing) {
-          await supabase.from('portfolio_reactions').update({ reaction }).eq('id', existing.id);
-        } else {
-          await supabase.from('portfolio_reactions').insert({ image_id: imageId, anonymous_id: anonymousId, reaction });
-        }
-      }
-      await refreshPortfolio();
-    } catch (err) {
-      console.error('Error updating reaction:', err);
-      toast.error('Kunne ikke opdatere reaktion');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // âââ Render helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Render helpers ─────────────────────────────────────────────────────────
   const renderMedia = (image: any) => {
     if (image.image_url.startsWith('youtube:')) {
       const videoId = image.image_url.split(':')[1];
@@ -168,35 +109,22 @@ const PortfolioPage: React.FC = () => {
       <div className="relative">{renderMedia(image)}</div>
       <div className="p-4">
         <h3 className="font-medium mb-1">{image.title}</h3>
-        {image.image_name && <p className="text-sm text-neutral-400 mb-3">{image.image_name}</p>}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => handleReaction(image.id, 'like')}
-            disabled={loading}
-            className={`flex items-center space-x-1 ${image.user_reaction === 'like' ? 'text-primary' : 'text-neutral-400 hover:text-white'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <ThumbsUp size={18} />
-            <span>{image.likes}</span>
-          </button>
-          <button
-            onClick={() => handleReaction(image.id, 'dislike')}
-            disabled={loading}
-            className={`flex items-center space-x-1 ${image.user_reaction === 'dislike' ? 'text-error' : 'text-neutral-400 hover:text-white'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <ThumbsDown size={18} />
-            <span>{image.dislikes}</span>
-          </button>
-        </div>
+        {image.image_name && (
+          <p className="text-sm text-neutral-400 mb-2">{image.image_name}</p>
+        )}
+        {image.description && (
+          <p className="text-sm text-neutral-300 leading-relaxed">{image.description}</p>
+        )}
       </div>
     </div>
   );
 
-  // âââ Grid items ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Grid items ─────────────────────────────────────────────────────────────
   const renderGrid = () => {
     const renderedBundles = new Set<string>();
 
     return sortedImages.map((image) => {
-      // ââ Bundled image ââ
+      // ── Bundled image ──
       if (image.bundle_id) {
         if (renderedBundles.has(image.bundle_id)) return null;
         renderedBundles.add(image.bundle_id);
@@ -258,6 +186,11 @@ const PortfolioPage: React.FC = () => {
                     <p className="text-sm text-neutral-400 mt-1">
                       {bundleImages.length} {bundleImages.length === 1 ? 'billede' : 'billeder'}
                     </p>
+                    {bundleImages[0]?.description && (
+                      <p className="text-sm text-neutral-300 mt-2 leading-relaxed line-clamp-2">
+                        {bundleImages[0].description}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -284,17 +217,7 @@ const PortfolioPage: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <ThumbsUp size={16} className="text-success" />
-                      <span className="text-neutral-300">{bundleImages.reduce((s, i) => s + i.likes, 0)}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <ThumbsDown size={16} className="text-error" />
-                      <span className="text-neutral-300">{bundleImages.reduce((s, i) => s + i.dislikes, 0)}</span>
-                    </div>
-                    <button className="text-primary hover:text-primary/80 font-medium">Luk</button>
-                  </div>
+                  <button className="text-primary hover:text-primary/80 font-medium">Luk</button>
                 </div>
               </div>
             </div>
@@ -316,7 +239,7 @@ const PortfolioPage: React.FC = () => {
         );
       }
 
-      // ââ Individual image ââ
+      // ── Individual image ──
       return renderImageCard(image);
     });
   };
@@ -325,7 +248,7 @@ const PortfolioPage: React.FC = () => {
     <div className="pt-20 pb-16">
       <SEO
         title={getContent('portfolio-page-title', "Vores arbejde")}
-        description="Se eksempler pÃ¥ vores dronefotografering og dronefilmning. Flai leverer professionelle luftoptagelser i hele Danmark."
+        description="Se eksempler på vores dronefotografering og dronefilmning. Flai leverer professionelle luftoptagelser i hele Danmark."
         canonical="/portfolio"
       />
       <div className="bg-primary/10 py-12 mb-12">
@@ -345,7 +268,6 @@ const PortfolioPage: React.FC = () => {
         </div>
       </div>
       <div className="container">
-
         {!isPortfolioLoaded ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {Array.from({ length: 6 }).map((_, i) => <PortfolioCardSkeleton key={i} />)}
