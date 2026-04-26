@@ -879,7 +879,7 @@ const HomePage: React.FC = () => {
         }}
       />
 
-      <HeroVideoSection videoUrl={heroVideoUrl} className="!pb-6 md:!pb-16">
+      <HeroVideoSection videoUrl={heroVideoUrl}>
         <div className="mb-6 text-white drop-shadow-2xl">
           <div className="flex flex-col items-center">
             <img
@@ -891,22 +891,25 @@ const HomePage: React.FC = () => {
             />
           </div>
         </div>
-        <div className="text-xl mb-8 text-neutral-100 drop-shadow-lg">
+        <div className="text-xl mb-5 sm:mb-8 text-neutral-100 drop-shadow-lg">
           <EditableContent
             contentKey="hero-subtitle"
             fallback="Dronefoto og video i Trekantsområdet. 100% tilfredshedsgaranti."
           />
         </div>
-        <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <button onClick={() => navigate('/products')} className="btn-primary text-lg px-8 py-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+          <button onClick={() => navigate('/products')} className="btn-primary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4">
             <EditableContent contentKey="hero-button-primary" fallback="Se Vores Tjenester" />
           </button>
-          <button onClick={() => navigate('/portfolio')} className="btn-secondary text-lg px-8 py-4 flex items-center justify-center">
+          <button onClick={() => navigate('/portfolio')} className="btn-secondary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 flex items-center justify-center">
             <EditableContent contentKey="hero-button-secondary" fallback="Se Vores Arbejde" />
           </button>
         </div>
 
       </HeroVideoSection>
+
+      {/* Small breathing room between hero and first content section */}
+      <div className="h-6 md:h-10 bg-neutral-800" />
 
       {homeSections.filter(s => s.is_active).map((section, index) => {
         const isCode = section.section_type === 'code' || section.section_type === 'visual_editor';
@@ -914,7 +917,7 @@ const HomePage: React.FC = () => {
           const CodeComp = CODE_SECTION_COMPONENTS[section.id];
           if (!CodeComp) return null;
           return (
-            <section key={section.id} className="bg-neutral-800 border-0 outline-none p-0">
+            <section key={section.id} className="bg-neutral-800 border-0 outline-none p-0 [&>*>section]:!py-10 md:[&>*>section]:!py-20">
               <div className="w-full">
                 <CodeComp />
               </div>
