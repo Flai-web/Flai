@@ -87,11 +87,11 @@ const PageSkeleton = () => {
           <div className="h-16 w-48 rounded animate-pulse-slow" style={{ background: 'rgba(255,255,255,0.15)' }} />
         </div>
         <div className="h-6 w-96 max-w-full mx-auto rounded animate-pulse-slow mb-5 sm:mb-8" style={{ background: 'rgba(255,255,255,0.2)' }} />
-        <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 w-full px-4 max-w-3xl">
-          {/* Matches btn-primary — solid blue */}
-          <div className="h-12 sm:h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#0F52BA' }} />
-          {/* Matches btn-secondary — dark with border */}
-          <div className="h-12 sm:h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#262626', border: '1px solid #404040' }} />
+        <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 w-full px-6 sm:px-0 sm:w-auto">
+          {/* Matches btn-primary text-lg px-8 py-4 — ~56px tall */}
+          <div className="h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#0F52BA' }} />
+          {/* Matches btn-secondary text-lg px-8 py-4 */}
+          <div className="h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#262626', border: '1px solid #404040' }} />
         </div>
       </div>
     </div>
