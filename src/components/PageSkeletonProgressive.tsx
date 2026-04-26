@@ -49,7 +49,7 @@ const PageSkeleton = () => {
   // Matches cloudinaryPosterUrl() in heroPreload.ts exactly — browser reuses the preloaded response.
   const POSTER_URL = `https://res.cloudinary.com/dq6jxbyrg/video/upload/c_fill,g_auto,w_1920,so_0/f_jpg/q_auto:good/herovideo.jpg`
   const HomeHeroSkeleton = () => (
-    <div className="relative h-screen w-full overflow-hidden flex items-end justify-center pb-8 md:pb-32" style={{ backgroundColor: '#111' }}>
+    <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#111' }}>
       {/* Same poster as HeroVideoSection — seamless handoff on Suspense swap */}
       <img
         src={POSTER_URL}
@@ -73,23 +73,25 @@ const PageSkeleton = () => {
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)',
           pointerEvents: 'none',
         }}
       />
 
-      {/* Hero content placeholders — reserves the exact space the real content occupies,
-          preventing layout shift when Suspense swaps skeleton → real page */}
-      <div className="relative z-10 text-center max-w-3xl mx-auto px-4 space-y-6">
+      {/* Spacer pushes content to bottom — mirrors flex-1 in HomePage */}
+      <div className="flex-1" />
+
+      {/* Hero content placeholders — matches HomePage's pb-16 sm:pb-20 + items-center */}
+      <div className="relative z-10 flex flex-col items-center pb-16 sm:pb-20">
         <div className="flex justify-center mb-6">
           <div className="h-16 w-48 rounded animate-pulse-slow" style={{ background: 'rgba(255,255,255,0.15)' }} />
         </div>
-        <div className="h-6 w-96 max-w-full mx-auto rounded animate-pulse-slow" style={{ background: 'rgba(255,255,255,0.2)' }} />
-        <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
+        <div className="h-6 w-96 max-w-full mx-auto rounded animate-pulse-slow mb-5 sm:mb-8" style={{ background: 'rgba(255,255,255,0.2)' }} />
+        <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 w-full px-4 max-w-3xl">
           {/* Matches btn-primary — solid blue */}
-          <div className="h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#0F52BA' }} />
+          <div className="h-12 sm:h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#0F52BA' }} />
           {/* Matches btn-secondary — dark with border */}
-          <div className="h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#262626', border: '1px solid #404040' }} />
+          <div className="h-12 sm:h-14 w-full sm:w-52 rounded-lg animate-pulse-slow" style={{ background: '#262626', border: '1px solid #404040' }} />
         </div>
       </div>
     </div>
