@@ -986,10 +986,8 @@ const HomePage: React.FC = () => {
         }}
       />
 
-     <HeroVideoSection videoUrl={heroVideoUrl}>
-  {/* Add this wrapper div */}
-  <div className="flex flex-col items-center justify-end h-full pb-12 sm:pb-16 w-full">
-    
+  <HeroVideoSection videoUrl={heroVideoUrl}>
+  <div className="flex flex-col items-center justify-end h-full w-full pb-16 sm:pb-20">
     <div className="mb-6 text-white drop-shadow-2xl">
       <div className="flex flex-col items-center">
         <img
