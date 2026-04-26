@@ -356,15 +356,6 @@ const Section_9009b281 = ((
     const [error, setError]               = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isAnimating, setIsAnimating]   = useState(false);
-    const [isMobile, setIsMobile]         = useState(false);
-
-    useEffect(() => {
-      const mq = window.matchMedia('(max-width: 768px)');
-      setIsMobile(mq.matches);
-      const h = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-      mq.addEventListener('change', h);
-      return () => mq.removeEventListener('change', h);
-    }, []);
 
     useEffect(() => {
       getReviews(false)
@@ -466,36 +457,25 @@ const Section_9009b281 = ((
               100% { background-position:  600px 0; }
             }
             .testi-skel {
-              background: linear-gradient(90deg, #1a2a4a 25%, #1e3260 50%, #1a2a4a 75%);
+              background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);
               background-size: 600px 100%;
               animation: testi-shimmer 1.6s infinite linear;
               border-radius: 6px;
             }
           `}</style>
           <div className="container">
-            <div
-              className="rounded-xl border border-blue-800 overflow-hidden"
-              style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '220px 1fr' }}
-            >
-              <div style={{ background: '#0F52BA' }} className="p-10 flex flex-col gap-5 border-r border-blue-700">
-                <div style={{ display: 'flex', gap: 10, marginTop: 'auto' }}>
-                  <div className="testi-skel" style={{ width: 38, height: 38, borderRadius: '50%', background: '#3A70C9' }} />
-                  <div className="testi-skel" style={{ width: 38, height: 38, borderRadius: '50%', background: '#3A70C9' }} />
-                </div>
+            <div className="rounded-xl p-10 flex flex-col gap-6" style={{ background: 'transparent' }}>
+              <div className="testi-skel" style={{ height: 40, width: 32 }} />
+              <div>
+                <div className="testi-skel" style={{ height: 18, marginBottom: 10 }} />
+                <div className="testi-skel" style={{ height: 18, marginBottom: 10, width: '88%' }} />
+                <div className="testi-skel" style={{ height: 18, width: '70%' }} />
               </div>
-              <div className="p-10 flex flex-col gap-4" style={{ background: 'transparent' }}>
-                <div className="testi-skel" style={{ height: 40, width: 32 }} />
-                <div>
-                  <div className="testi-skel" style={{ height: 18, marginBottom: 10 }} />
-                  <div className="testi-skel" style={{ height: 18, marginBottom: 10, width: '88%' }} />
-                  <div className="testi-skel" style={{ height: 18, width: '70%' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 'auto' }}>
-                  <div className="testi-skel" style={{ width: 44, height: 44, borderRadius: '50%' }} />
-                  <div>
-                    <div className="testi-skel" style={{ height: 13, width: 110, marginBottom: 8 }} />
-                    <div className="testi-skel" style={{ height: 11, width: 80 }} />
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <div className="testi-skel" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div className="testi-skel" style={{ height: 13, width: 110, marginBottom: 8 }} />
+                  <div className="testi-skel" style={{ height: 11, width: 80 }} />
                 </div>
               </div>
             </div>
@@ -509,18 +489,8 @@ const Section_9009b281 = ((
       return (
         <section className="py-20">
           <div className="container">
-            <div
-              className="rounded-xl border border-neutral-700 overflow-hidden"
-              style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '220px 1fr' }}
-            >
-              <div style={{ background: '#0F52BA' }} className="p-10 border-r border-blue-700">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <span style={{ fontSize: '0.7rem', color: '#FFFFFF', fontWeight: 600, letterSpacing: '0.08em' }}>01 / 01</span>
-                </div>
-              </div>
-              <div className="p-10 flex items-center justify-center" style={{ background: 'transparent' }}>
-                <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>
-              </div>
+            <div className="rounded-xl p-10 flex items-center justify-center" style={{ background: 'transparent' }}>
+              <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>
             </div>
           </div>
         </section>
@@ -531,71 +501,18 @@ const Section_9009b281 = ((
     return (
       <section className="py-20">
         <style>{`
-          .testi-grid {
-            display: grid;
-            grid-template-columns: 220px 1fr;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #2a2a2a;
-          }
-          @media (max-width: 768px) {
-            .testi-grid { grid-template-columns: 1fr; }
-            .testi-left { border-right: none !important; border-bottom: 1px solid #295BAE; }
-          }
-
-          /* ── LEFT PANEL: solid blue, navigation only ── */
-          .testi-left {
-            background: #0F52BA;
-            padding: 48px 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            gap: 14px;
-            border-right: 1px solid #295BAE;
-          }
-
-          /* ── RIGHT PANEL: transparent ── */
-          .testi-right {
+          /* ── Single-column card, fully transparent ── */
+          .testi-card {
             background: transparent;
             padding: 48px 52px;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             position: relative;
             overflow: hidden;
+            border-radius: 12px;
           }
           @media (max-width: 768px) {
-            .testi-left  { padding: 24px; }
-            .testi-right { padding: 32px 24px; }
-          }
-
-          .testi-counter {
-            font-size: 0.7rem;
-            color: #FFFFFF;
-            font-variant-numeric: tabular-nums;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-          }
-
-          .testi-arrow-row {
-            display: flex;
-            gap: 8px;
-          }
-
-          /* Arrow buttons */
-          .arrow-btn {
-            width: 38px; height: 38px;
-            border-radius: 8px;
-            border: 1px solid #5784C9;
-            background: #2B5EAE;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            color: #ffffff;
-            transition: background 0.2s ease, border-color 0.2s ease;
-          }
-          .arrow-btn:hover {
-            background: #3F72C2;
-            border-color: #A3C0EB;
+            .testi-card { padding: 32px 24px; }
           }
 
           .big-quote {
@@ -617,7 +534,6 @@ const Section_9009b281 = ((
             line-height: 1.65;
             letter-spacing: -0.01em;
             margin: 0;
-            flex: 1;
             transition: opacity 0.28s ease, transform 0.28s ease;
           }
           .testi-quote-text.fading {
@@ -631,7 +547,6 @@ const Section_9009b281 = ((
             gap: 12px;
             margin-top: 32px;
             padding-top: 20px;
-            border-top: 1px solid #2e2e2e;
             transition: opacity 0.28s ease;
           }
           .testi-author-row.fading { opacity: 0; }
@@ -676,9 +591,7 @@ const Section_9009b281 = ((
             transition: border-color 0.2s ease;
             flex-shrink: 0;
           }
-          .google-badge:hover {
-            border-color: #0F52BA;
-          }
+          .google-badge:hover { border-color: #0F52BA; }
           .google-badge-text {
             font-size: 0.7rem;
             font-weight: 600;
@@ -691,17 +604,96 @@ const Section_9009b281 = ((
             gap: 2px;
             margin-bottom: 6px;
           }
+
+          /* ── Navigation row below the review ── */
+          .testi-nav-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 24px;
+            padding-top: 20px;
+          }
+
+          .testi-counter {
+            font-size: 0.7rem;
+            color: #A3A3A3;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            flex: 1;
+          }
+
+          .testi-arrow-row {
+            display: flex;
+            gap: 8px;
+          }
+
+          .arrow-btn {
+            width: 38px; height: 38px;
+            border-radius: 8px;
+            border: 1px solid #404040;
+            background: transparent;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            color: #ffffff;
+            transition: background 0.2s ease, border-color 0.2s ease;
+          }
+          .arrow-btn:hover {
+            background: #1e1e1e;
+            border-color: #0F52BA;
+          }
         `}</style>
 
         <div className="container">
-          <div className="testi-grid">
+          <div className="testi-card">
+            <span className="big-quote" aria-hidden="true">"</span>
 
-            {/* ── LEFT PANEL: navigation only ── */}
-            <div className="testi-left">
-              <span className="testi-counter">
-                {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}
-              </span>
-              {reviews.length > 1 && (
+            <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>
+              {current?.snippet || 'Fantastisk service og oplevelse!'}
+            </p>
+
+            <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>
+              {highResThumbnail ? (
+                <img
+                  src={highResThumbnail}
+                  alt={current?.user?.name}
+                  className="author-avatar"
+                />
+              ) : (
+                <div
+                  className="author-avatar-fallback"
+                  style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}
+                >
+                  {defaultInitials}
+                </div>
+              )}
+
+              <div className="author-info">
+                <div className="testi-stars">
+                  {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
+                </div>
+                <p className="author-name">{current?.user?.name || 'Anonym'}</p>
+                <p className="author-meta">Verificeret Google-anmeldelse</p>
+              </div>
+
+              <a
+                href={googleReviewLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="google-badge"
+                title="Se anmeldelse på Google"
+              >
+                <GoogleG size={14} />
+                <span className="google-badge-text">Google</span>
+              </a>
+            </div>
+
+            {/* ── Navigation below review ── */}
+            {reviews.length > 1 && (
+              <div className="testi-nav-row">
+                <span className="testi-counter">
+                  {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}
+                </span>
                 <div className="testi-arrow-row">
                   <button className="arrow-btn" onClick={handlePrev} aria-label="Forrige anmeldelse">
                     <ArrowLeft />
@@ -710,58 +702,12 @@ const Section_9009b281 = ((
                     <ArrowRight />
                   </button>
                 </div>
-              )}
-            </div>
-
-            {/* ── RIGHT PANEL ── */}
-            <div className="testi-right">
-              <span className="big-quote" aria-hidden="true">"</span>
-
-              <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>
-                {current?.snippet || 'Fantastisk service og oplevelse!'}
-              </p>
-
-              <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>
-                {highResThumbnail ? (
-                  <img
-                    src={highResThumbnail}
-                    alt={current?.user?.name}
-                    className="author-avatar"
-                  />
-                ) : (
-                  <div
-                    className="author-avatar-fallback"
-                    style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}
-                  >
-                    {defaultInitials}
-                  </div>
-                )}
-
-                <div className="author-info">
-                  <div className="testi-stars">
-                    {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
-                  </div>
-                  <p className="author-name">{current?.user?.name || 'Anonym'}</p>
-                  <p className="author-meta">Verificeret Google-anmeldelse</p>
-                </div>
-
-                <a
-                  href={googleReviewLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="google-badge"
-                  title="Se anmeldelse på Google"
-                >
-                  <GoogleG size={14} />
-                  <span className="google-badge-text">Google</span>
-                </a>
               </div>
+            )}
 
-              {reviews.length > 1 && (
-                <ProgressBar key={currentIndex} duration={progressDuration} />
-              )}
-            </div>
-
+            {reviews.length > 1 && (
+              <ProgressBar key={currentIndex} duration={progressDuration} />
+            )}
           </div>
         </div>
       </section>
@@ -816,7 +762,7 @@ export const DEPLOYED_HOME_SECTIONS = [
     "code_language": null,
     "code_files": [
       {
-        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n// ─── Config ───────────────────────────────────────────────────────────────────\nconst SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\nconst SUPABASE_KEY =\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\nconst PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\nconst STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\nconst EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\nconst RATING_KEY = 'flai_rating_' + PLACE_ID;\n\nconst PINNED_REVIEWER_NAME: string | null = null;\n\n// ─── Cache helpers ────────────────────────────────────────────────────────────\nfunction shouldFetch() {\n  const exp = localStorage.getItem(EXPIRES_AT_KEY);\n  if (!exp) return true;\n  return new Date() >= new Date(exp);\n}\n\nfunction saveToCache(reviews: any[], rating: string | number) {\n  const midnight = new Date();\n  midnight.setDate(midnight.getDate() + 1);\n  midnight.setHours(0, 0, 0, 0);\n  localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));\n  localStorage.setItem(RATING_KEY, String(rating));\n  localStorage.setItem(EXPIRES_AT_KEY, midnight.toISOString());\n}\n\nasync function fetchFromApi() {\n  const res = await fetch(\n    SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,\n    { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }\n  );\n  if (!res.ok) throw new Error('API error');\n  const data = await res.json();\n  if (!data.reviews || !data.reviews.length) throw new Error('Empty');\n  saveToCache(data.reviews, data.rating || '0.0');\n  return { reviews: data.reviews, rating: String(data.rating || '0.0') };\n}\n\nasync function getReviews(force: boolean) {\n  const cached = localStorage.getItem(STORAGE_KEY);\n  const cachedRating = localStorage.getItem(RATING_KEY);\n  if (cached && cachedRating && !shouldFetch() && !force) {\n    return { reviews: JSON.parse(cached), rating: cachedRating };\n  }\n  return fetchFromApi();\n}\n\n// ─── Icons ────────────────────────────────────────────────────────────────────\nfunction ArrowLeft() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M19 12H5M12 5l-7 7 7 7\" />\n    </svg>\n  );\n}\n\nfunction ArrowRight() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M5 12h14M12 5l7 7-7 7\" />\n    </svg>\n  );\n}\n\nfunction GoogleG({ size = 14 }: { size?: number }) {\n  return (\n    <svg width={size} height={size} viewBox=\"0 0 24 24\" fill=\"none\">\n      <path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\" />\n      <path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\" />\n      <path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\" />\n      <path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\" />\n    </svg>\n  );\n}\n\nfunction StarIcon() {\n  return (\n    <svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"#FBBF24\" stroke=\"none\">\n      <path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\" />\n    </svg>\n  );\n}\n\n// ─── Progress Bar ─────────────────────────────────────────────────────────────\nfunction ProgressBar({ duration }: { duration: number }) {\n  return (\n    <>\n      <style>{`\n        @keyframes testi-progress-fill {\n          from { transform: scaleX(0); }\n          to   { transform: scaleX(1); }\n        }\n        .testi-progress-bar {\n          position: absolute;\n          bottom: 0; left: 0;\n          height: 2px; width: 100%;\n          background: #0F52BA;\n          transform-origin: left;\n          animation: testi-progress-fill ${duration}ms linear forwards;\n        }\n      `}</style>\n      <div className=\"testi-progress-bar\" />\n    </>\n  );\n}\n\n// ─── Main Component ───────────────────────────────────────────────────────────\nconst Testimonials: React.FC = () => {\n  const [reviews, setReviews]           = useState<any[]>([]);\n  const [loading, setLoading]           = useState(true);\n  const [error, setError]               = useState(false);\n  const [currentIndex, setCurrentIndex] = useState(0);\n  const [isAnimating, setIsAnimating]   = useState(false);\n  const [isMobile, setIsMobile]         = useState(false);\n\n  useEffect(() => {\n    const mq = window.matchMedia('(max-width: 768px)');\n    setIsMobile(mq.matches);\n    const h = (e: MediaQueryListEvent) => setIsMobile(e.matches);\n    mq.addEventListener('change', h);\n    return () => mq.removeEventListener('change', h);\n  }, []);\n\n  useEffect(() => {\n    getReviews(false)\n      .then((d) => {\n        const fiveStar = d.reviews.filter((r: any) => Number(r.rating) === 5);\n        const sorted = [...fiveStar].sort((a: any, b: any) => {\n          const aThumb = a.user?.thumbnail ? 1 : 0;\n          const bThumb = b.user?.thumbnail ? 1 : 0;\n          if (aThumb !== bThumb) return bThumb - aThumb;\n          const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;\n          const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;\n          return bText - aText;\n        });\n\n        if (PINNED_REVIEWER_NAME && sorted.length > 0) {\n          const pinnedIdx = sorted.findIndex(\n            (r: any) =>\n              (r.user?.name || '').toLowerCase().trim() ===\n              PINNED_REVIEWER_NAME.toLowerCase().trim()\n          );\n          if (pinnedIdx > 0) {\n            const [pinned] = sorted.splice(pinnedIdx, 1);\n            setReviews([pinned, ...sorted]);\n          } else {\n            setReviews(sorted);\n          }\n        } else {\n          setReviews(sorted);\n        }\n        setLoading(false);\n      })\n      .catch(() => {\n        setError(true);\n        setLoading(false);\n      });\n  }, []);\n\n  const navigate = useCallback(\n    (dir: 'prev' | 'next') => {\n      if (isAnimating || reviews.length <= 1) return;\n      setIsAnimating(true);\n      setTimeout(() => {\n        setCurrentIndex((prev) =>\n          dir === 'next'\n            ? (prev + 1) % reviews.length\n            : prev === 0\n            ? reviews.length - 1\n            : prev - 1\n        );\n        setIsAnimating(false);\n      }, 280);\n    },\n    [isAnimating, reviews.length]\n  );\n\n  const handleNext = useCallback(() => navigate('next'), [navigate]);\n  const handlePrev = useCallback(() => navigate('prev'), [navigate]);\n\n  // Auto-advance\n  useEffect(() => {\n    if (reviews.length <= 1) return;\n    const text = reviews[currentIndex]?.snippet || '';\n    const wordCount = text.split(/\\s+/).length || 10;\n    const readTimeMs = Math.max(5000, (wordCount / 3.33) * 1000 + 2000);\n    const timer = setTimeout(handleNext, readTimeMs);\n    return () => clearTimeout(timer);\n  }, [currentIndex, reviews, handleNext]);\n\n  const current = reviews[currentIndex];\n  const highResThumbnail = current?.user?.thumbnail\n    ? current.user.thumbnail.replace(/=s\\d+/, '=s400')\n    : null;\n  const defaultInitials = (current?.user?.name || '?')\n    .split(' ')\n    .map((n: string) => n[0])\n    .slice(0, 2)\n    .join('')\n    .toUpperCase();\n  const hue =\n    (current?.user?.name || '')\n      .split('')\n      .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;\n  const googleReviewLink =\n    current?.link ||\n    'https://search.google.com/local/writereview?placeid=' + PLACE_ID;\n\n  const progressDuration = Math.max(\n    5000,\n    ((current?.snippet || '').split(/\\s+/).length / 3.33) * 1000 + 2000\n  );\n\n  // ── Skeleton ──────────────────────────────────────────────────────────────\n  if (loading) {\n    return (\n      <section className=\"py-20\">\n        <style>{`\n          @keyframes testi-shimmer {\n            0%   { background-position: -600px 0; }\n            100% { background-position:  600px 0; }\n          }\n          .testi-skel {\n            background: linear-gradient(90deg, #1a2a4a 25%, #1e3260 50%, #1a2a4a 75%);\n            background-size: 600px 100%;\n            animation: testi-shimmer 1.6s infinite linear;\n            border-radius: 6px;\n          }\n        `}</style>\n        <div className=\"container\">\n          <div\n            className=\"rounded-xl border border-blue-800 overflow-hidden\"\n            style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '220px 1fr' }}\n          >\n            <div style={{ background: '#0F52BA' }} className=\"p-10 flex flex-col gap-5 border-r border-blue-700\">\n              <div style={{ display: 'flex', gap: 10, marginTop: 'auto' }}>\n                <div className=\"testi-skel\" style={{ width: 38, height: 38, borderRadius: '50%', background: '#3A70C9' }} />\n                <div className=\"testi-skel\" style={{ width: 38, height: 38, borderRadius: '50%', background: '#3A70C9' }} />\n              </div>\n            </div>\n            <div className=\"p-10 flex flex-col gap-4\" style={{ background: 'transparent' }}>\n              <div className=\"testi-skel\" style={{ height: 40, width: 32 }} />\n              <div>\n                <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10 }} />\n                <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10, width: '88%' }} />\n                <div className=\"testi-skel\" style={{ height: 18, width: '70%' }} />\n              </div>\n              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 'auto' }}>\n                <div className=\"testi-skel\" style={{ width: 44, height: 44, borderRadius: '50%' }} />\n                <div>\n                  <div className=\"testi-skel\" style={{ height: 13, width: 110, marginBottom: 8 }} />\n                  <div className=\"testi-skel\" style={{ height: 11, width: 80 }} />\n                </div>\n              </div>\n            </div>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Error / empty ─────────────────────────────────────────────────────────\n  if (error || reviews.length === 0) {\n    return (\n      <section className=\"py-20\">\n        <div className=\"container\">\n          <div\n            className=\"rounded-xl border border-neutral-700 overflow-hidden\"\n            style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '220px 1fr' }}\n          >\n            <div style={{ background: '#0F52BA' }} className=\"p-10 border-r border-blue-700\">\n              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>\n                <span style={{ fontSize: '0.7rem', color: '#FFFFFF', fontWeight: 600, letterSpacing: '0.08em' }}>01 / 01</span>\n              </div>\n            </div>\n            <div className=\"p-10 flex items-center justify-center\" style={{ background: 'transparent' }}>\n              <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>\n            </div>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Content ───────────────────────────────────────────────────────────────\n  return (\n    <section className=\"py-20\">\n      <style>{`\n        .testi-grid {\n          display: grid;\n          grid-template-columns: 220px 1fr;\n          border-radius: 12px;\n          overflow: hidden;\n          border: 1px solid #2a2a2a;\n        }\n        @media (max-width: 768px) {\n          .testi-grid { grid-template-columns: 1fr; }\n          .testi-left { border-right: none !important; border-bottom: 1px solid #295BAE; }\n        }\n\n        /* ── LEFT PANEL: solid blue, navigation only ── */\n        .testi-left {\n          background: #0F52BA;\n          padding: 48px 40px;\n          display: flex;\n          flex-direction: column;\n          justify-content: flex-end;\n          gap: 14px;\n          border-right: 1px solid #295BAE;\n        }\n\n        /* ── RIGHT PANEL: transparent ── */\n        .testi-right {\n          background: transparent;\n          padding: 48px 52px;\n          display: flex;\n          flex-direction: column;\n          justify-content: space-between;\n          position: relative;\n          overflow: hidden;\n        }\n        @media (max-width: 768px) {\n          .testi-left  { padding: 24px; }\n          .testi-right { padding: 32px 24px; }\n        }\n\n        .testi-counter {\n          font-size: 0.7rem;\n          color: #FFFFFF;\n          font-variant-numeric: tabular-nums;\n          font-weight: 600;\n          letter-spacing: 0.08em;\n        }\n\n        .testi-arrow-row {\n          display: flex;\n          gap: 8px;\n        }\n\n        /* Arrow buttons */\n        .arrow-btn {\n          width: 38px; height: 38px;\n          border-radius: 8px;\n          border: 1px solid #5784C9;\n          background: #2B5EAE;\n          display: flex; align-items: center; justify-content: center;\n          cursor: pointer;\n          color: #ffffff;\n          transition: background 0.2s ease, border-color 0.2s ease;\n        }\n        .arrow-btn:hover {\n          background: #3F72C2;\n          border-color: #A3C0EB;\n        }\n\n        .big-quote {\n          font-size: 5rem;\n          line-height: 0.7;\n          color: #3B82F6;\n          font-family: Georgia, serif;\n          font-weight: 700;\n          user-select: none;\n          display: block;\n          margin-bottom: 8px;\n        }\n\n        .testi-quote-text {\n          font-family: 'Inter', sans-serif;\n          font-size: clamp(1.05rem, 1.8vw, 1.35rem);\n          font-weight: 400;\n          color: #f0f0f0;\n          line-height: 1.65;\n          letter-spacing: -0.01em;\n          margin: 0;\n          flex: 1;\n          transition: opacity 0.28s ease, transform 0.28s ease;\n        }\n        .testi-quote-text.fading {\n          opacity: 0;\n          transform: translateY(8px);\n        }\n\n        .testi-author-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 32px;\n          padding-top: 20px;\n          border-top: 1px solid #2e2e2e;\n          transition: opacity 0.28s ease;\n        }\n        .testi-author-row.fading { opacity: 0; }\n\n        .author-avatar {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          object-fit: cover;\n          flex-shrink: 0;\n        }\n        .author-avatar-fallback {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          display: flex; align-items: center; justify-content: center;\n          font-size: 1.2rem; font-weight: 700; color: white;\n          flex-shrink: 0;\n        }\n\n        .author-info { flex: 1; min-width: 0; }\n        .author-name {\n          font-size: 0.9rem;\n          font-weight: 700;\n          color: #ffffff;\n          margin: 0 0 2px 0;\n          white-space: nowrap;\n          overflow: hidden;\n          text-overflow: ellipsis;\n        }\n        .author-meta {\n          font-size: 0.75rem;\n          color: #A3A3A3;\n          margin: 0;\n        }\n\n        .google-badge {\n          display: flex; align-items: center; gap: 5px;\n          text-decoration: none;\n          padding: 5px 10px;\n          border-radius: 6px;\n          border: 1px solid #404040;\n          background: transparent;\n          transition: border-color 0.2s ease;\n          flex-shrink: 0;\n        }\n        .google-badge:hover {\n          border-color: #0F52BA;\n        }\n        .google-badge-text {\n          font-size: 0.7rem;\n          font-weight: 600;\n          color: #CCCCCC;\n          letter-spacing: 0.04em;\n        }\n\n        .testi-stars {\n          display: flex;\n          gap: 2px;\n          margin-bottom: 6px;\n        }\n      `}</style>\n\n      <div className=\"container\">\n        <div className=\"testi-grid\">\n\n          {/* ── LEFT PANEL: navigation only ── */}\n          <div className=\"testi-left\">\n            <span className=\"testi-counter\">\n              {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}\n            </span>\n            {reviews.length > 1 && (\n              <div className=\"testi-arrow-row\">\n                <button className=\"arrow-btn\" onClick={handlePrev} aria-label=\"Forrige anmeldelse\">\n                  <ArrowLeft />\n                </button>\n                <button className=\"arrow-btn\" onClick={handleNext} aria-label=\"Næste anmeldelse\">\n                  <ArrowRight />\n                </button>\n              </div>\n            )}\n          </div>\n\n          {/* ── RIGHT PANEL ── */}\n          <div className=\"testi-right\">\n            <span className=\"big-quote\" aria-hidden=\"true\">\"</span>\n\n            <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>\n              {current?.snippet || 'Fantastisk service og oplevelse!'}\n            </p>\n\n            <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>\n              {highResThumbnail ? (\n                <img\n                  src={highResThumbnail}\n                  alt={current?.user?.name}\n                  className=\"author-avatar\"\n                />\n              ) : (\n                <div\n                  className=\"author-avatar-fallback\"\n                  style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}\n                >\n                  {defaultInitials}\n                </div>\n              )}\n\n              <div className=\"author-info\">\n                <div className=\"testi-stars\">\n                  {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}\n                </div>\n                <p className=\"author-name\">{current?.user?.name || 'Anonym'}</p>\n                <p className=\"author-meta\">Verificeret Google-anmeldelse</p>\n              </div>\n\n              <a\n                href={googleReviewLink}\n                target=\"_blank\"\n                rel=\"noopener noreferrer\"\n                className=\"google-badge\"\n                title=\"Se anmeldelse på Google\"\n              >\n                <GoogleG size={14} />\n                <span className=\"google-badge-text\">Google</span>\n              </a>\n            </div>\n\n            {reviews.length > 1 && (\n              <ProgressBar key={currentIndex} duration={progressDuration} />\n            )}\n          </div>\n\n        </div>\n      </div>\n    </section>\n  );\n};\n\nexport default Testimonials;",
+        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n// ─── Config ───────────────────────────────────────────────────────────────────\nconst SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\nconst SUPABASE_KEY =\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\nconst PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\nconst STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\nconst EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\nconst RATING_KEY = 'flai_rating_' + PLACE_ID;\n\nconst PINNED_REVIEWER_NAME: string | null = null;\n\n// ─── Cache helpers ────────────────────────────────────────────────────────────\nfunction shouldFetch() {\n  const exp = localStorage.getItem(EXPIRES_AT_KEY);\n  if (!exp) return true;\n  return new Date() >= new Date(exp);\n}\n\nfunction saveToCache(reviews: any[], rating: string | number) {\n  const midnight = new Date();\n  midnight.setDate(midnight.getDate() + 1);\n  midnight.setHours(0, 0, 0, 0);\n  localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));\n  localStorage.setItem(RATING_KEY, String(rating));\n  localStorage.setItem(EXPIRES_AT_KEY, midnight.toISOString());\n}\n\nasync function fetchFromApi() {\n  const res = await fetch(\n    SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,\n    { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }\n  );\n  if (!res.ok) throw new Error('API error');\n  const data = await res.json();\n  if (!data.reviews || !data.reviews.length) throw new Error('Empty');\n  saveToCache(data.reviews, data.rating || '0.0');\n  return { reviews: data.reviews, rating: String(data.rating || '0.0') };\n}\n\nasync function getReviews(force: boolean) {\n  const cached = localStorage.getItem(STORAGE_KEY);\n  const cachedRating = localStorage.getItem(RATING_KEY);\n  if (cached && cachedRating && !shouldFetch() && !force) {\n    return { reviews: JSON.parse(cached), rating: cachedRating };\n  }\n  return fetchFromApi();\n}\n\n// ─── Icons ────────────────────────────────────────────────────────────────────\nfunction ArrowLeft() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M19 12H5M12 5l-7 7 7 7\" />\n    </svg>\n  );\n}\n\nfunction ArrowRight() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M5 12h14M12 5l7 7-7 7\" />\n    </svg>\n  );\n}\n\nfunction GoogleG({ size = 14 }: { size?: number }) {\n  return (\n    <svg width={size} height={size} viewBox=\"0 0 24 24\" fill=\"none\">\n      <path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\" />\n      <path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\" />\n      <path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\" />\n      <path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\" />\n    </svg>\n  );\n}\n\nfunction StarIcon() {\n  return (\n    <svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"#FBBF24\" stroke=\"none\">\n      <path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\" />\n    </svg>\n  );\n}\n\n// ─── Progress Bar ─────────────────────────────────────────────────────────────\nfunction ProgressBar({ duration }: { duration: number }) {\n  return (\n    <>\n      <style>{`\n        @keyframes testi-progress-fill {\n          from { transform: scaleX(0); }\n          to   { transform: scaleX(1); }\n        }\n        .testi-progress-bar {\n          position: absolute;\n          bottom: 0; left: 0;\n          height: 2px; width: 100%;\n          background: #0F52BA;\n          transform-origin: left;\n          animation: testi-progress-fill ${duration}ms linear forwards;\n        }\n      `}</style>\n      <div className=\"testi-progress-bar\" />\n    </>\n  );\n}\n\n// ─── Main Component ───────────────────────────────────────────────────────────\nconst Testimonials: React.FC = () => {\n  const [reviews, setReviews]           = useState<any[]>([]);\n  const [loading, setLoading]           = useState(true);\n  const [error, setError]               = useState(false);\n  const [currentIndex, setCurrentIndex] = useState(0);\n  const [isAnimating, setIsAnimating]   = useState(false);\n\n  useEffect(() => {\n    getReviews(false)\n      .then((d) => {\n        const fiveStar = d.reviews.filter((r: any) => Number(r.rating) === 5);\n        const sorted = [...fiveStar].sort((a: any, b: any) => {\n          const aThumb = a.user?.thumbnail ? 1 : 0;\n          const bThumb = b.user?.thumbnail ? 1 : 0;\n          if (aThumb !== bThumb) return bThumb - aThumb;\n          const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;\n          const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;\n          return bText - aText;\n        });\n\n        if (PINNED_REVIEWER_NAME && sorted.length > 0) {\n          const pinnedIdx = sorted.findIndex(\n            (r: any) =>\n              (r.user?.name || '').toLowerCase().trim() ===\n              PINNED_REVIEWER_NAME.toLowerCase().trim()\n          );\n          if (pinnedIdx > 0) {\n            const [pinned] = sorted.splice(pinnedIdx, 1);\n            setReviews([pinned, ...sorted]);\n          } else {\n            setReviews(sorted);\n          }\n        } else {\n          setReviews(sorted);\n        }\n        setLoading(false);\n      })\n      .catch(() => {\n        setError(true);\n        setLoading(false);\n      });\n  }, []);\n\n  const navigate = useCallback(\n    (dir: 'prev' | 'next') => {\n      if (isAnimating || reviews.length <= 1) return;\n      setIsAnimating(true);\n      setTimeout(() => {\n        setCurrentIndex((prev) =>\n          dir === 'next'\n            ? (prev + 1) % reviews.length\n            : prev === 0\n            ? reviews.length - 1\n            : prev - 1\n        );\n        setIsAnimating(false);\n      }, 280);\n    },\n    [isAnimating, reviews.length]\n  );\n\n  const handleNext = useCallback(() => navigate('next'), [navigate]);\n  const handlePrev = useCallback(() => navigate('prev'), [navigate]);\n\n  // Auto-advance\n  useEffect(() => {\n    if (reviews.length <= 1) return;\n    const text = reviews[currentIndex]?.snippet || '';\n    const wordCount = text.split(/\\s+/).length || 10;\n    const readTimeMs = Math.max(5000, (wordCount / 3.33) * 1000 + 2000);\n    const timer = setTimeout(handleNext, readTimeMs);\n    return () => clearTimeout(timer);\n  }, [currentIndex, reviews, handleNext]);\n\n  const current = reviews[currentIndex];\n  const highResThumbnail = current?.user?.thumbnail\n    ? current.user.thumbnail.replace(/=s\\d+/, '=s400')\n    : null;\n  const defaultInitials = (current?.user?.name || '?')\n    .split(' ')\n    .map((n: string) => n[0])\n    .slice(0, 2)\n    .join('')\n    .toUpperCase();\n  const hue =\n    (current?.user?.name || '')\n      .split('')\n      .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;\n  const googleReviewLink =\n    current?.link ||\n    'https://search.google.com/local/writereview?placeid=' + PLACE_ID;\n\n  const progressDuration = Math.max(\n    5000,\n    ((current?.snippet || '').split(/\\s+/).length / 3.33) * 1000 + 2000\n  );\n\n  // ── Skeleton ──────────────────────────────────────────────────────────────\n  if (loading) {\n    return (\n      <section className=\"py-20\">\n        <style>{`\n          @keyframes testi-shimmer {\n            0%   { background-position: -600px 0; }\n            100% { background-position:  600px 0; }\n          }\n          .testi-skel {\n            background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);\n            background-size: 600px 100%;\n            animation: testi-shimmer 1.6s infinite linear;\n            border-radius: 6px;\n          }\n        `}</style>\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex flex-col gap-6\" style={{ background: 'transparent' }}>\n            <div className=\"testi-skel\" style={{ height: 40, width: 32 }} />\n            <div>\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10 }} />\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10, width: '88%' }} />\n              <div className=\"testi-skel\" style={{ height: 18, width: '70%' }} />\n            </div>\n            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>\n              <div className=\"testi-skel\" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />\n              <div style={{ flex: 1 }}>\n                <div className=\"testi-skel\" style={{ height: 13, width: 110, marginBottom: 8 }} />\n                <div className=\"testi-skel\" style={{ height: 11, width: 80 }} />\n              </div>\n            </div>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Error / empty ─────────────────────────────────────────────────────────\n  if (error || reviews.length === 0) {\n    return (\n      <section className=\"py-20\">\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex items-center justify-center\" style={{ background: 'transparent' }}>\n            <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Content ───────────────────────────────────────────────────────────────\n  return (\n    <section className=\"py-20\">\n      <style>{`\n        /* ── Single-column card, fully transparent ── */\n        .testi-card {\n          background: transparent;\n          padding: 48px 52px;\n          display: flex;\n          flex-direction: column;\n          position: relative;\n          overflow: hidden;\n          border-radius: 12px;\n        }\n        @media (max-width: 768px) {\n          .testi-card { padding: 32px 24px; }\n        }\n\n        .big-quote {\n          font-size: 5rem;\n          line-height: 0.7;\n          color: #3B82F6;\n          font-family: Georgia, serif;\n          font-weight: 700;\n          user-select: none;\n          display: block;\n          margin-bottom: 8px;\n        }\n\n        .testi-quote-text {\n          font-family: 'Inter', sans-serif;\n          font-size: clamp(1.05rem, 1.8vw, 1.35rem);\n          font-weight: 400;\n          color: #f0f0f0;\n          line-height: 1.65;\n          letter-spacing: -0.01em;\n          margin: 0;\n          transition: opacity 0.28s ease, transform 0.28s ease;\n        }\n        .testi-quote-text.fading {\n          opacity: 0;\n          transform: translateY(8px);\n        }\n\n        .testi-author-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 32px;\n          padding-top: 20px;\n          transition: opacity 0.28s ease;\n        }\n        .testi-author-row.fading { opacity: 0; }\n\n        .author-avatar {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          object-fit: cover;\n          flex-shrink: 0;\n        }\n        .author-avatar-fallback {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          display: flex; align-items: center; justify-content: center;\n          font-size: 1.2rem; font-weight: 700; color: white;\n          flex-shrink: 0;\n        }\n\n        .author-info { flex: 1; min-width: 0; }\n        .author-name {\n          font-size: 0.9rem;\n          font-weight: 700;\n          color: #ffffff;\n          margin: 0 0 2px 0;\n          white-space: nowrap;\n          overflow: hidden;\n          text-overflow: ellipsis;\n        }\n        .author-meta {\n          font-size: 0.75rem;\n          color: #A3A3A3;\n          margin: 0;\n        }\n\n        .google-badge {\n          display: flex; align-items: center; gap: 5px;\n          text-decoration: none;\n          padding: 5px 10px;\n          border-radius: 6px;\n          border: 1px solid #404040;\n          background: transparent;\n          transition: border-color 0.2s ease;\n          flex-shrink: 0;\n        }\n        .google-badge:hover { border-color: #0F52BA; }\n        .google-badge-text {\n          font-size: 0.7rem;\n          font-weight: 600;\n          color: #CCCCCC;\n          letter-spacing: 0.04em;\n        }\n\n        .testi-stars {\n          display: flex;\n          gap: 2px;\n          margin-bottom: 6px;\n        }\n\n        /* ── Navigation row below the review ── */\n        .testi-nav-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 24px;\n          padding-top: 20px;\n        }\n\n        .testi-counter {\n          font-size: 0.7rem;\n          color: #A3A3A3;\n          font-variant-numeric: tabular-nums;\n          font-weight: 600;\n          letter-spacing: 0.08em;\n          flex: 1;\n        }\n\n        .testi-arrow-row {\n          display: flex;\n          gap: 8px;\n        }\n\n        .arrow-btn {\n          width: 38px; height: 38px;\n          border-radius: 8px;\n          border: 1px solid #404040;\n          background: transparent;\n          display: flex; align-items: center; justify-content: center;\n          cursor: pointer;\n          color: #ffffff;\n          transition: background 0.2s ease, border-color 0.2s ease;\n        }\n        .arrow-btn:hover {\n          background: #1e1e1e;\n          border-color: #0F52BA;\n        }\n      `}</style>\n\n      <div className=\"container\">\n        <div className=\"testi-card\">\n          <span className=\"big-quote\" aria-hidden=\"true\">\"</span>\n\n          <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>\n            {current?.snippet || 'Fantastisk service og oplevelse!'}\n          </p>\n\n          <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>\n            {highResThumbnail ? (\n              <img\n                src={highResThumbnail}\n                alt={current?.user?.name}\n                className=\"author-avatar\"\n              />\n            ) : (\n              <div\n                className=\"author-avatar-fallback\"\n                style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}\n              >\n                {defaultInitials}\n              </div>\n            )}\n\n            <div className=\"author-info\">\n              <div className=\"testi-stars\">\n                {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}\n              </div>\n              <p className=\"author-name\">{current?.user?.name || 'Anonym'}</p>\n              <p className=\"author-meta\">Verificeret Google-anmeldelse</p>\n            </div>\n\n            <a\n              href={googleReviewLink}\n              target=\"_blank\"\n              rel=\"noopener noreferrer\"\n              className=\"google-badge\"\n              title=\"Se anmeldelse på Google\"\n            >\n              <GoogleG size={14} />\n              <span className=\"google-badge-text\">Google</span>\n            </a>\n          </div>\n\n          {/* ── Navigation below review ── */}\n          {reviews.length > 1 && (\n            <div className=\"testi-nav-row\">\n              <span className=\"testi-counter\">\n                {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}\n              </span>\n              <div className=\"testi-arrow-row\">\n                <button className=\"arrow-btn\" onClick={handlePrev} aria-label=\"Forrige anmeldelse\">\n                  <ArrowLeft />\n                </button>\n                <button className=\"arrow-btn\" onClick={handleNext} aria-label=\"Næste anmeldelse\">\n                  <ArrowRight />\n                </button>\n              </div>\n            </div>\n          )}\n\n          {reviews.length > 1 && (\n            <ProgressBar key={currentIndex} duration={progressDuration} />\n          )}\n        </div>\n      </div>\n    </section>\n  );\n};\n\nexport default Testimonials;",
         "filename": "component.tsx",
         "language": "tsx"
       }
