@@ -987,34 +987,37 @@ const HomePage: React.FC = () => {
         }}
       />
 
-      <HeroVideoSection videoUrl={heroVideoUrl}>
-        <div className="mb-6 text-white drop-shadow-2xl">
-          <div className="flex flex-col items-center">
-            <img
-              src={heroLogo}
-              alt="Flai.dk"
-              width="160"
-              height="64"
-              className="h-16 md:h-16 w-auto transition-all duration-500"
-            />
-          </div>
-        </div>
-        <div className="text-xl mb-5 sm:mb-8 text-neutral-100 drop-shadow-lg">
-          <EditableContent
-            contentKey="hero-subtitle"
-            fallback="Dronefoto og video i Trekantsområdet. 100% tilfredshedsgaranti."
-          />
-        </div>
-        <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-          <button onClick={() => navigate('/products')} className="btn-primary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4">
-            <EditableContent contentKey="hero-button-primary" fallback="Se Vores Tjenester" />
-          </button>
-          <button onClick={() => navigate('/portfolio')} className="btn-secondary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 flex items-center justify-center">
-            <EditableContent contentKey="hero-button-secondary" fallback="Se Vores Arbejde" />
-          </button>
-        </div>
-
-      </HeroVideoSection>
+     <HeroVideoSection videoUrl={heroVideoUrl}>
+  {/* Add this wrapper div */}
+  <div className="flex flex-col items-center justify-end h-full pb-12 sm:pb-16 w-full">
+    
+    <div className="mb-6 text-white drop-shadow-2xl">
+      <div className="flex flex-col items-center">
+        <img
+          src={heroLogo}
+          alt="Flai.dk"
+          width="160"
+          height="64"
+          className="h-16 md:h-16 w-auto transition-all duration-500"
+        />
+      </div>
+    </div>
+    <div className="text-xl mb-5 sm:mb-8 text-neutral-100 drop-shadow-lg">
+      <EditableContent
+        contentKey="hero-subtitle"
+        fallback="Dronefoto og video i Trekantsområdet. 100% tilfredshedsgaranti."
+      />
+    </div>
+    <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+      <button onClick={() => navigate('/products')} className="btn-primary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4">
+        <EditableContent contentKey="hero-button-primary" fallback="Se Vores Tjenester" />
+      </button>
+      <button onClick={() => navigate('/portfolio')} className="btn-secondary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 flex items-center justify-center">
+        <EditableContent contentKey="hero-button-secondary" fallback="Se Vores Arbejde" />
+      </button>
+    </div>
+  </div>
+</HeroVideoSection>
 
       {/* Small breathing room between hero and first content section */}
       <div className="h-6 md:h-10 bg-neutral-800" />
