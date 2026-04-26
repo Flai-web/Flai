@@ -354,6 +354,72 @@ const Section_9009b281 = ((
     );
   }
 
+  // ─── Single Review Card ───────────────────────────────────────────────────────
+  function ReviewCard({ review, isAnimating, isSolo }: { review: any; isAnimating: boolean; isSolo?: boolean }) {
+    const highResThumbnail = review?.user?.thumbnail
+      ? review.user.thumbnail.replace(/=s\d+/, '=s400')
+      : null;
+    const defaultInitials = (review?.user?.name || '?')
+      .split(' ')
+      .map((n: string) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+    const hue =
+      (review?.user?.name || '')
+        .split('')
+        .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;
+    const googleReviewLink =
+      review?.link ||
+      'https://search.google.com/local/writereview?placeid=' + PLACE_ID;
+
+    return (
+      <div className={`testi-review-card${isSolo ? ' testi-review-card--solo' : ''}`}>
+        <span className="big-quote" aria-hidden="true">"</span>
+
+        <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>
+          {review?.snippet || 'Fantastisk service og oplevelse!'}
+        </p>
+
+        <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>
+          {highResThumbnail ? (
+            <img
+              src={highResThumbnail}
+              alt={review?.user?.name}
+              className="author-avatar"
+            />
+          ) : (
+            <div
+              className="author-avatar-fallback"
+              style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}
+            >
+              {defaultInitials}
+            </div>
+          )}
+
+          <div className="author-info">
+            <div className="testi-stars">
+              {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
+            </div>
+            <p className="author-name">{review?.user?.name || 'Anonym'}</p>
+            <p className="author-meta">Verificeret Google-anmeldelse</p>
+          </div>
+
+          <a
+            href={googleReviewLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="google-badge"
+            title="Se anmeldelse på Google"
+          >
+            <GoogleG size={14} />
+            <span className="google-badge-text">Google</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Main Component ───────────────────────────────────────────────────────────
   const Testimonials: React.FC = () => {
     const [reviews, setReviews]           = useState<any[]>([]);
@@ -398,18 +464,27 @@ const Section_9009b281 = ((
         });
     }, []);
 
+    // On desktop we show 2 at a time, so we advance by 2
+    const DESKTOP_PER_PAGE = 2;
+
+    // Total "pages" on desktop = ceil(reviews.length / 2), on mobile = reviews.length
+    // We track by the index of the first visible review (always even on desktop advances)
     const navigate = useCallback(
       (dir: 'prev' | 'next') => {
         if (isAnimating || reviews.length <= 1) return;
         setIsAnimating(true);
         setTimeout(() => {
-          setCurrentIndex((prev) =>
-            dir === 'next'
-              ? (prev + 1) % reviews.length
-              : prev === 0
-              ? reviews.length - 1
-              : prev - 1
-          );
+          setCurrentIndex((prev) => {
+            if (dir === 'next') {
+              return (prev + DESKTOP_PER_PAGE) % reviews.length;
+            } else {
+              const newIdx = prev - DESKTOP_PER_PAGE;
+              // Round down to nearest even multiple
+              return newIdx < 0
+                ? Math.floor((reviews.length - 1) / DESKTOP_PER_PAGE) * DESKTOP_PER_PAGE
+                : newIdx;
+            }
+          });
           setIsAnimating(false);
         }, 280);
       },
@@ -419,38 +494,38 @@ const Section_9009b281 = ((
     const handleNext = useCallback(() => navigate('next'), [navigate]);
     const handlePrev = useCallback(() => navigate('prev'), [navigate]);
 
-    // Auto-advance
+    // Auto-advance — based on the longer of the two visible reviews
     useEffect(() => {
       if (reviews.length <= 1) return;
-      const text = reviews[currentIndex]?.snippet || '';
-      const wordCount = text.split(/\s+/).length || 10;
+      const r1 = reviews[currentIndex];
+      const r2 = reviews[(currentIndex + 1) % reviews.length];
+      const text1 = r1?.snippet || '';
+      const text2 = r2?.snippet || '';
+      const wordCount = Math.max(
+        text1.split(/\s+/).length,
+        text2.split(/\s+/).length
+      ) || 10;
       const readTimeMs = Math.max(5000, (wordCount / 3.33) * 1000 + 2000);
       const timer = setTimeout(handleNext, readTimeMs);
       return () => clearTimeout(timer);
     }, [currentIndex, reviews, handleNext]);
 
-    const current = reviews[currentIndex];
-    const highResThumbnail = current?.user?.thumbnail
-      ? current.user.thumbnail.replace(/=s\d+/, '=s400')
-      : null;
-    const defaultInitials = (current?.user?.name || '?')
-      .split(' ')
-      .map((n: string) => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-    const hue =
-      (current?.user?.name || '')
-        .split('')
-        .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;
-    const googleReviewLink =
-      current?.link ||
-      'https://search.google.com/local/writereview?placeid=' + PLACE_ID;
+    const review1 = reviews[currentIndex];
+    const review2 = reviews.length > 1 ? reviews[(currentIndex + 1) % reviews.length] : null;
 
-    const progressDuration = Math.max(
-      5000,
-      ((current?.snippet || '').split(/\s+/).length / 3.33) * 1000 + 2000
-    );
+    const progressDuration = (() => {
+      const text1 = review1?.snippet || '';
+      const text2 = review2?.snippet || '';
+      const wordCount = Math.max(
+        text1.split(/\s+/).length,
+        text2.split(/\s+/).length
+      ) || 10;
+      return Math.max(5000, (wordCount / 3.33) * 1000 + 2000);
+    })();
+
+    // Desktop page counter: show pair index
+    const desktopPage = Math.floor(currentIndex / DESKTOP_PER_PAGE) + 1;
+    const desktopTotal = Math.ceil(reviews.length / DESKTOP_PER_PAGE);
 
     // ── Skeleton ──────────────────────────────────────────────────────────────
     if (loading) {
@@ -502,22 +577,55 @@ const Section_9009b281 = ((
       );
     }
 
+    const isSingleReview = reviews.length === 1;
+
     // ── Content ───────────────────────────────────────────────────────────────
     return (
       <section className="py-20">
         <style>{`
-          /* ── Single-column card, fully transparent ── */
-          .testi-card {
+          /* ── Layout wrapper ── */
+          .testi-outer {
+            position: relative;
+            overflow: hidden;
+          }
+
+          /* ── Two-column grid on desktop, single on mobile ── */
+          .testi-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+          }
+          @media (max-width: 768px) {
+            .testi-grid {
+              grid-template-columns: 1fr;
+            }
+            /* Hide second card on mobile */
+            .testi-grid > .testi-review-card:nth-child(2) {
+              display: none;
+            }
+          }
+
+          /* ── Each review card ── */
+          .testi-review-card {
             background: transparent;
             padding: 48px 52px;
             display: flex;
             flex-direction: column;
             position: relative;
-            overflow: hidden;
-            border-radius: 12px;
           }
+          /* Solo: span both columns so it fills the full width */
+          .testi-review-card--solo {
+            grid-column: 1 / -1;
+          }
+          /* Divider between the two cards on desktop */
+          @media (min-width: 769px) {
+            .testi-grid:not(:has(.testi-review-card--solo)) > .testi-review-card:first-child {
+              border-right: 1px solid #2a2a2a;
+            }
+          }
+
           @media (max-width: 768px) {
-            .testi-card { padding: 24px 0; }
+            .testi-review-card { padding: 24px 0; }
             .big-quote { font-size: 3.5rem !important; }
             .testi-quote-text { font-size: 1rem !important; }
           }
@@ -542,6 +650,7 @@ const Section_9009b281 = ((
             letter-spacing: -0.01em;
             margin: 0;
             transition: opacity 0.28s ease, transform 0.28s ease;
+            flex: 1;
           }
           .testi-quote-text.fading {
             opacity: 0;
@@ -612,13 +721,16 @@ const Section_9009b281 = ((
             margin-bottom: 6px;
           }
 
-          /* ── Navigation row below the review ── */
+          /* ── Navigation row — spans full width below both cards ── */
           .testi-nav-row {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-top: 24px;
-            padding-top: 20px;
+            padding: 20px 52px 0;
+            border-top: 1px solid #2a2a2a;
+          }
+          @media (max-width: 768px) {
+            .testi-nav-row { padding: 20px 0 0; }
           }
 
           .testi-counter {
@@ -649,57 +761,44 @@ const Section_9009b281 = ((
             background: #1e1e1e;
             border-color: #0F52BA;
           }
+
+          .testi-progress-bar {
+            position: absolute;
+            bottom: 0; left: 0;
+            height: 2px; width: 100%;
+            background: #0F52BA;
+            transform-origin: left;
+          }
         `}</style>
 
         <div className="container">
-          <div className="testi-card">
-            <span className="big-quote" aria-hidden="true">"</span>
-
-            <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>
-              {current?.snippet || 'Fantastisk service og oplevelse!'}
-            </p>
-
-            <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>
-              {highResThumbnail ? (
-                <img
-                  src={highResThumbnail}
-                  alt={current?.user?.name}
-                  className="author-avatar"
+          <div className="testi-outer">
+            {/* ── Review cards grid ── */}
+            <div className="testi-grid">
+              <ReviewCard
+                review={review1}
+                isAnimating={isAnimating}
+                isSolo={isSingleReview}
+              />
+              {!isSingleReview && review2 && (
+                <ReviewCard
+                  review={review2}
+                  isAnimating={isAnimating}
                 />
-              ) : (
-                <div
-                  className="author-avatar-fallback"
-                  style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}
-                >
-                  {defaultInitials}
-                </div>
               )}
-
-              <div className="author-info">
-                <div className="testi-stars">
-                  {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
-                </div>
-                <p className="author-name">{current?.user?.name || 'Anonym'}</p>
-                <p className="author-meta">Verificeret Google-anmeldelse</p>
-              </div>
-
-              <a
-                href={googleReviewLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="google-badge"
-                title="Se anmeldelse på Google"
-              >
-                <GoogleG size={14} />
-                <span className="google-badge-text">Google</span>
-              </a>
             </div>
 
-            {/* ── Navigation below review ── */}
+            {/* ── Navigation below, full width ── */}
             {reviews.length > 1 && (
               <div className="testi-nav-row">
                 <span className="testi-counter">
-                  {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}
+                  {/* Desktop: show pair page; mobile: show individual */}
+                  <span className="testi-counter-desktop" style={{ display: 'none' }}>
+                    {String(desktopPage).padStart(2, '0')} / {String(desktopTotal).padStart(2, '0')}
+                  </span>
+                  <span className="testi-counter-mobile">
+                    {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}
+                  </span>
                 </span>
                 <div className="testi-arrow-row">
                   <button className="arrow-btn" onClick={handlePrev} aria-label="Forrige anmeldelse">
@@ -712,11 +811,20 @@ const Section_9009b281 = ((
               </div>
             )}
 
+            {/* ── Progress bar ── */}
             {reviews.length > 1 && (
               <ProgressBar key={currentIndex} duration={progressDuration} />
             )}
           </div>
         </div>
+
+        {/* Counter visibility via CSS (avoids JS media query) */}
+        <style>{`
+          @media (min-width: 769px) {
+            .testi-counter-desktop { display: inline !important; }
+            .testi-counter-mobile  { display: none !important; }
+          }
+        `}</style>
       </section>
     );
   };
@@ -769,7 +877,7 @@ export const DEPLOYED_HOME_SECTIONS = [
     "code_language": null,
     "code_files": [
       {
-        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n// ─── Config ───────────────────────────────────────────────────────────────────\nconst SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\nconst SUPABASE_KEY =\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\nconst PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\nconst STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\nconst EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\nconst RATING_KEY = 'flai_rating_' + PLACE_ID;\n\nconst PINNED_REVIEWER_NAME: string | null = null;\n\n// ─── Cache helpers ────────────────────────────────────────────────────────────\nfunction shouldFetch() {\n  const exp = localStorage.getItem(EXPIRES_AT_KEY);\n  if (!exp) return true;\n  return new Date() >= new Date(exp);\n}\n\nfunction saveToCache(reviews: any[], rating: string | number) {\n  const midnight = new Date();\n  midnight.setDate(midnight.getDate() + 1);\n  midnight.setHours(0, 0, 0, 0);\n  localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));\n  localStorage.setItem(RATING_KEY, String(rating));\n  localStorage.setItem(EXPIRES_AT_KEY, midnight.toISOString());\n}\n\nasync function fetchFromApi() {\n  const res = await fetch(\n    SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,\n    { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }\n  );\n  if (!res.ok) throw new Error('API error');\n  const data = await res.json();\n  if (!data.reviews || !data.reviews.length) throw new Error('Empty');\n  saveToCache(data.reviews, data.rating || '0.0');\n  return { reviews: data.reviews, rating: String(data.rating || '0.0') };\n}\n\nasync function getReviews(force: boolean) {\n  const cached = localStorage.getItem(STORAGE_KEY);\n  const cachedRating = localStorage.getItem(RATING_KEY);\n  if (cached && cachedRating && !shouldFetch() && !force) {\n    return { reviews: JSON.parse(cached), rating: cachedRating };\n  }\n  return fetchFromApi();\n}\n\n// ─── Icons ────────────────────────────────────────────────────────────────────\nfunction ArrowLeft() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M19 12H5M12 5l-7 7 7 7\" />\n    </svg>\n  );\n}\n\nfunction ArrowRight() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M5 12h14M12 5l7 7-7 7\" />\n    </svg>\n  );\n}\n\nfunction GoogleG({ size = 14 }: { size?: number }) {\n  return (\n    <svg width={size} height={size} viewBox=\"0 0 24 24\" fill=\"none\">\n      <path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\" />\n      <path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\" />\n      <path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\" />\n      <path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\" />\n    </svg>\n  );\n}\n\nfunction StarIcon() {\n  return (\n    <svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"#FBBF24\" stroke=\"none\">\n      <path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\" />\n    </svg>\n  );\n}\n\n// ─── Progress Bar ─────────────────────────────────────────────────────────────\nfunction ProgressBar({ duration }: { duration: number }) {\n  return (\n    <>\n      <style>{`\n        @keyframes testi-progress-fill {\n          from { transform: scaleX(0); }\n          to   { transform: scaleX(1); }\n        }\n        .testi-progress-bar {\n          position: absolute;\n          bottom: 0; left: 0;\n          height: 2px; width: 100%;\n          background: #0F52BA;\n          transform-origin: left;\n          animation: testi-progress-fill ${duration}ms linear forwards;\n        }\n      `}</style>\n      <div className=\"testi-progress-bar\" />\n    </>\n  );\n}\n\n// ─── Main Component ───────────────────────────────────────────────────────────\nconst Testimonials: React.FC = () => {\n  const [reviews, setReviews]           = useState<any[]>([]);\n  const [loading, setLoading]           = useState(true);\n  const [error, setError]               = useState(false);\n  const [currentIndex, setCurrentIndex] = useState(0);\n  const [isAnimating, setIsAnimating]   = useState(false);\n\n  useEffect(() => {\n    getReviews(false)\n      .then((d) => {\n        const fiveStar = d.reviews.filter((r: any) => Number(r.rating) === 5);\n        const sorted = [...fiveStar].sort((a: any, b: any) => {\n          const aThumb = a.user?.thumbnail ? 1 : 0;\n          const bThumb = b.user?.thumbnail ? 1 : 0;\n          if (aThumb !== bThumb) return bThumb - aThumb;\n          const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;\n          const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;\n          return bText - aText;\n        });\n\n        if (PINNED_REVIEWER_NAME && sorted.length > 0) {\n          const pinnedIdx = sorted.findIndex(\n            (r: any) =>\n              (r.user?.name || '').toLowerCase().trim() ===\n              PINNED_REVIEWER_NAME.toLowerCase().trim()\n          );\n          if (pinnedIdx > 0) {\n            const [pinned] = sorted.splice(pinnedIdx, 1);\n            setReviews([pinned, ...sorted]);\n          } else {\n            setReviews(sorted);\n          }\n        } else {\n          setReviews(sorted);\n        }\n        setLoading(false);\n      })\n      .catch(() => {\n        setError(true);\n        setLoading(false);\n      });\n  }, []);\n\n  const navigate = useCallback(\n    (dir: 'prev' | 'next') => {\n      if (isAnimating || reviews.length <= 1) return;\n      setIsAnimating(true);\n      setTimeout(() => {\n        setCurrentIndex((prev) =>\n          dir === 'next'\n            ? (prev + 1) % reviews.length\n            : prev === 0\n            ? reviews.length - 1\n            : prev - 1\n        );\n        setIsAnimating(false);\n      }, 280);\n    },\n    [isAnimating, reviews.length]\n  );\n\n  const handleNext = useCallback(() => navigate('next'), [navigate]);\n  const handlePrev = useCallback(() => navigate('prev'), [navigate]);\n\n  // Auto-advance\n  useEffect(() => {\n    if (reviews.length <= 1) return;\n    const text = reviews[currentIndex]?.snippet || '';\n    const wordCount = text.split(/\\s+/).length || 10;\n    const readTimeMs = Math.max(5000, (wordCount / 3.33) * 1000 + 2000);\n    const timer = setTimeout(handleNext, readTimeMs);\n    return () => clearTimeout(timer);\n  }, [currentIndex, reviews, handleNext]);\n\n  const current = reviews[currentIndex];\n  const highResThumbnail = current?.user?.thumbnail\n    ? current.user.thumbnail.replace(/=s\\d+/, '=s400')\n    : null;\n  const defaultInitials = (current?.user?.name || '?')\n    .split(' ')\n    .map((n: string) => n[0])\n    .slice(0, 2)\n    .join('')\n    .toUpperCase();\n  const hue =\n    (current?.user?.name || '')\n      .split('')\n      .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;\n  const googleReviewLink =\n    current?.link ||\n    'https://search.google.com/local/writereview?placeid=' + PLACE_ID;\n\n  const progressDuration = Math.max(\n    5000,\n    ((current?.snippet || '').split(/\\s+/).length / 3.33) * 1000 + 2000\n  );\n\n  // ── Skeleton ──────────────────────────────────────────────────────────────\n  if (loading) {\n    return (\n      <section className=\"py-20\">\n        <style>{`\n          @keyframes testi-shimmer {\n            0%   { background-position: -600px 0; }\n            100% { background-position:  600px 0; }\n          }\n          .testi-skel {\n            background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);\n            background-size: 600px 100%;\n            animation: testi-shimmer 1.6s infinite linear;\n            border-radius: 6px;\n          }\n        `}</style>\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex flex-col gap-6\" style={{ background: 'transparent' }}>\n            <div className=\"testi-skel\" style={{ height: 40, width: 32 }} />\n            <div>\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10 }} />\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10, width: '88%' }} />\n              <div className=\"testi-skel\" style={{ height: 18, width: '70%' }} />\n            </div>\n            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>\n              <div className=\"testi-skel\" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />\n              <div style={{ flex: 1 }}>\n                <div className=\"testi-skel\" style={{ height: 13, width: 110, marginBottom: 8 }} />\n                <div className=\"testi-skel\" style={{ height: 11, width: 80 }} />\n              </div>\n            </div>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Error / empty ─────────────────────────────────────────────────────────\n  if (error || reviews.length === 0) {\n    return (\n      <section className=\"py-20\">\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex items-center justify-center\" style={{ background: 'transparent' }}>\n            <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Content ───────────────────────────────────────────────────────────────\n  return (\n    <section className=\"py-20\">\n      <style>{`\n        /* ── Single-column card, fully transparent ── */\n        .testi-card {\n          background: transparent;\n          padding: 48px 52px;\n          display: flex;\n          flex-direction: column;\n          position: relative;\n          overflow: hidden;\n          border-radius: 12px;\n        }\n        @media (max-width: 768px) {\n          .testi-card { padding: 24px 0; }\n          .big-quote { font-size: 3.5rem !important; }\n          .testi-quote-text { font-size: 1rem !important; }\n        }\n\n        .big-quote {\n          font-size: 5rem;\n          line-height: 0.7;\n          color: #3B82F6;\n          font-family: Georgia, serif;\n          font-weight: 700;\n          user-select: none;\n          display: block;\n          margin-bottom: 8px;\n        }\n\n        .testi-quote-text {\n          font-family: 'Inter', sans-serif;\n          font-size: clamp(1.05rem, 1.8vw, 1.35rem);\n          font-weight: 400;\n          color: #f0f0f0;\n          line-height: 1.65;\n          letter-spacing: -0.01em;\n          margin: 0;\n          transition: opacity 0.28s ease, transform 0.28s ease;\n        }\n        .testi-quote-text.fading {\n          opacity: 0;\n          transform: translateY(8px);\n        }\n\n        .testi-author-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 32px;\n          padding-top: 20px;\n          transition: opacity 0.28s ease;\n        }\n        .testi-author-row.fading { opacity: 0; }\n\n        .author-avatar {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          object-fit: cover;\n          flex-shrink: 0;\n        }\n        .author-avatar-fallback {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          display: flex; align-items: center; justify-content: center;\n          font-size: 1.2rem; font-weight: 700; color: white;\n          flex-shrink: 0;\n        }\n\n        .author-info { flex: 1; min-width: 0; }\n        .author-name {\n          font-size: 0.9rem;\n          font-weight: 700;\n          color: #ffffff;\n          margin: 0 0 2px 0;\n          white-space: nowrap;\n          overflow: hidden;\n          text-overflow: ellipsis;\n        }\n        .author-meta {\n          font-size: 0.75rem;\n          color: #A3A3A3;\n          margin: 0;\n        }\n\n        .google-badge {\n          display: flex; align-items: center; gap: 5px;\n          text-decoration: none;\n          padding: 5px 10px;\n          border-radius: 6px;\n          border: 1px solid #404040;\n          background: transparent;\n          transition: border-color 0.2s ease;\n          flex-shrink: 0;\n        }\n        .google-badge:hover { border-color: #0F52BA; }\n        .google-badge-text {\n          font-size: 0.7rem;\n          font-weight: 600;\n          color: #CCCCCC;\n          letter-spacing: 0.04em;\n        }\n\n        .testi-stars {\n          display: flex;\n          gap: 2px;\n          margin-bottom: 6px;\n        }\n\n        /* ── Navigation row below the review ── */\n        .testi-nav-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 24px;\n          padding-top: 20px;\n        }\n\n        .testi-counter {\n          font-size: 0.7rem;\n          color: #A3A3A3;\n          font-variant-numeric: tabular-nums;\n          font-weight: 600;\n          letter-spacing: 0.08em;\n          flex: 1;\n        }\n\n        .testi-arrow-row {\n          display: flex;\n          gap: 8px;\n        }\n\n        .arrow-btn {\n          width: 38px; height: 38px;\n          border-radius: 8px;\n          border: 1px solid #404040;\n          background: transparent;\n          display: flex; align-items: center; justify-content: center;\n          cursor: pointer;\n          color: #ffffff;\n          transition: background 0.2s ease, border-color 0.2s ease;\n        }\n        .arrow-btn:hover {\n          background: #1e1e1e;\n          border-color: #0F52BA;\n        }\n      `}</style>\n\n      <div className=\"container\">\n        <div className=\"testi-card\">\n          <span className=\"big-quote\" aria-hidden=\"true\">\"</span>\n\n          <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>\n            {current?.snippet || 'Fantastisk service og oplevelse!'}\n          </p>\n\n          <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>\n            {highResThumbnail ? (\n              <img\n                src={highResThumbnail}\n                alt={current?.user?.name}\n                className=\"author-avatar\"\n              />\n            ) : (\n              <div\n                className=\"author-avatar-fallback\"\n                style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}\n              >\n                {defaultInitials}\n              </div>\n            )}\n\n            <div className=\"author-info\">\n              <div className=\"testi-stars\">\n                {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}\n              </div>\n              <p className=\"author-name\">{current?.user?.name || 'Anonym'}</p>\n              <p className=\"author-meta\">Verificeret Google-anmeldelse</p>\n            </div>\n\n            <a\n              href={googleReviewLink}\n              target=\"_blank\"\n              rel=\"noopener noreferrer\"\n              className=\"google-badge\"\n              title=\"Se anmeldelse på Google\"\n            >\n              <GoogleG size={14} />\n              <span className=\"google-badge-text\">Google</span>\n            </a>\n          </div>\n\n          {/* ── Navigation below review ── */}\n          {reviews.length > 1 && (\n            <div className=\"testi-nav-row\">\n              <span className=\"testi-counter\">\n                {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}\n              </span>\n              <div className=\"testi-arrow-row\">\n                <button className=\"arrow-btn\" onClick={handlePrev} aria-label=\"Forrige anmeldelse\">\n                  <ArrowLeft />\n                </button>\n                <button className=\"arrow-btn\" onClick={handleNext} aria-label=\"Næste anmeldelse\">\n                  <ArrowRight />\n                </button>\n              </div>\n            </div>\n          )}\n\n          {reviews.length > 1 && (\n            <ProgressBar key={currentIndex} duration={progressDuration} />\n          )}\n        </div>\n      </div>\n    </section>\n  );\n};\n\nexport default Testimonials;",
+        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n// ─── Config ───────────────────────────────────────────────────────────────────\nconst SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\nconst SUPABASE_KEY =\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\nconst PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\nconst STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\nconst EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\nconst RATING_KEY = 'flai_rating_' + PLACE_ID;\n\nconst PINNED_REVIEWER_NAME: string | null = null;\n\n// ─── Cache helpers ────────────────────────────────────────────────────────────\nfunction shouldFetch() {\n  const exp = localStorage.getItem(EXPIRES_AT_KEY);\n  if (!exp) return true;\n  return new Date() >= new Date(exp);\n}\n\nfunction saveToCache(reviews: any[], rating: string | number) {\n  const midnight = new Date();\n  midnight.setDate(midnight.getDate() + 1);\n  midnight.setHours(0, 0, 0, 0);\n  localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));\n  localStorage.setItem(RATING_KEY, String(rating));\n  localStorage.setItem(EXPIRES_AT_KEY, midnight.toISOString());\n}\n\nasync function fetchFromApi() {\n  const res = await fetch(\n    SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,\n    { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }\n  );\n  if (!res.ok) throw new Error('API error');\n  const data = await res.json();\n  if (!data.reviews || !data.reviews.length) throw new Error('Empty');\n  saveToCache(data.reviews, data.rating || '0.0');\n  return { reviews: data.reviews, rating: String(data.rating || '0.0') };\n}\n\nasync function getReviews(force: boolean) {\n  const cached = localStorage.getItem(STORAGE_KEY);\n  const cachedRating = localStorage.getItem(RATING_KEY);\n  if (cached && cachedRating && !shouldFetch() && !force) {\n    return { reviews: JSON.parse(cached), rating: cachedRating };\n  }\n  return fetchFromApi();\n}\n\n// ─── Icons ────────────────────────────────────────────────────────────────────\nfunction ArrowLeft() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M19 12H5M12 5l-7 7 7 7\" />\n    </svg>\n  );\n}\n\nfunction ArrowRight() {\n  return (\n    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">\n      <path d=\"M5 12h14M12 5l7 7-7 7\" />\n    </svg>\n  );\n}\n\nfunction GoogleG({ size = 14 }: { size?: number }) {\n  return (\n    <svg width={size} height={size} viewBox=\"0 0 24 24\" fill=\"none\">\n      <path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\" />\n      <path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\" />\n      <path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\" />\n      <path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\" />\n    </svg>\n  );\n}\n\nfunction StarIcon() {\n  return (\n    <svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"#FBBF24\" stroke=\"none\">\n      <path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\" />\n    </svg>\n  );\n}\n\n// ─── Progress Bar ─────────────────────────────────────────────────────────────\nfunction ProgressBar({ duration }: { duration: number }) {\n  return (\n    <>\n      <style>{`\n        @keyframes testi-progress-fill {\n          from { transform: scaleX(0); }\n          to   { transform: scaleX(1); }\n        }\n        .testi-progress-bar {\n          position: absolute;\n          bottom: 0; left: 0;\n          height: 2px; width: 100%;\n          background: #0F52BA;\n          transform-origin: left;\n          animation: testi-progress-fill ${duration}ms linear forwards;\n        }\n      `}</style>\n      <div className=\"testi-progress-bar\" />\n    </>\n  );\n}\n\n// ─── Single Review Card ───────────────────────────────────────────────────────\nfunction ReviewCard({ review, isAnimating, isSolo }: { review: any; isAnimating: boolean; isSolo?: boolean }) {\n  const highResThumbnail = review?.user?.thumbnail\n    ? review.user.thumbnail.replace(/=s\\d+/, '=s400')\n    : null;\n  const defaultInitials = (review?.user?.name || '?')\n    .split(' ')\n    .map((n: string) => n[0])\n    .slice(0, 2)\n    .join('')\n    .toUpperCase();\n  const hue =\n    (review?.user?.name || '')\n      .split('')\n      .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;\n  const googleReviewLink =\n    review?.link ||\n    'https://search.google.com/local/writereview?placeid=' + PLACE_ID;\n\n  return (\n    <div className={`testi-review-card${isSolo ? ' testi-review-card--solo' : ''}`}>\n      <span className=\"big-quote\" aria-hidden=\"true\">\"</span>\n\n      <p className={`testi-quote-text${isAnimating ? ' fading' : ''}`}>\n        {review?.snippet || 'Fantastisk service og oplevelse!'}\n      </p>\n\n      <div className={`testi-author-row${isAnimating ? ' fading' : ''}`}>\n        {highResThumbnail ? (\n          <img\n            src={highResThumbnail}\n            alt={review?.user?.name}\n            className=\"author-avatar\"\n          />\n        ) : (\n          <div\n            className=\"author-avatar-fallback\"\n            style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}\n          >\n            {defaultInitials}\n          </div>\n        )}\n\n        <div className=\"author-info\">\n          <div className=\"testi-stars\">\n            {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}\n          </div>\n          <p className=\"author-name\">{review?.user?.name || 'Anonym'}</p>\n          <p className=\"author-meta\">Verificeret Google-anmeldelse</p>\n        </div>\n\n        <a\n          href={googleReviewLink}\n          target=\"_blank\"\n          rel=\"noopener noreferrer\"\n          className=\"google-badge\"\n          title=\"Se anmeldelse på Google\"\n        >\n          <GoogleG size={14} />\n          <span className=\"google-badge-text\">Google</span>\n        </a>\n      </div>\n    </div>\n  );\n}\n\n// ─── Main Component ───────────────────────────────────────────────────────────\nconst Testimonials: React.FC = () => {\n  const [reviews, setReviews]           = useState<any[]>([]);\n  const [loading, setLoading]           = useState(true);\n  const [error, setError]               = useState(false);\n  const [currentIndex, setCurrentIndex] = useState(0);\n  const [isAnimating, setIsAnimating]   = useState(false);\n\n  useEffect(() => {\n    getReviews(false)\n      .then((d) => {\n        const fiveStar = d.reviews.filter((r: any) => Number(r.rating) === 5);\n        const sorted = [...fiveStar].sort((a: any, b: any) => {\n          const aThumb = a.user?.thumbnail ? 1 : 0;\n          const bThumb = b.user?.thumbnail ? 1 : 0;\n          if (aThumb !== bThumb) return bThumb - aThumb;\n          const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;\n          const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;\n          return bText - aText;\n        });\n\n        if (PINNED_REVIEWER_NAME && sorted.length > 0) {\n          const pinnedIdx = sorted.findIndex(\n            (r: any) =>\n              (r.user?.name || '').toLowerCase().trim() ===\n              PINNED_REVIEWER_NAME.toLowerCase().trim()\n          );\n          if (pinnedIdx > 0) {\n            const [pinned] = sorted.splice(pinnedIdx, 1);\n            setReviews([pinned, ...sorted]);\n          } else {\n            setReviews(sorted);\n          }\n        } else {\n          setReviews(sorted);\n        }\n        setLoading(false);\n      })\n      .catch(() => {\n        setError(true);\n        setLoading(false);\n      });\n  }, []);\n\n  // On desktop we show 2 at a time, so we advance by 2\n  const DESKTOP_PER_PAGE = 2;\n\n  // Total \"pages\" on desktop = ceil(reviews.length / 2), on mobile = reviews.length\n  // We track by the index of the first visible review (always even on desktop advances)\n  const navigate = useCallback(\n    (dir: 'prev' | 'next') => {\n      if (isAnimating || reviews.length <= 1) return;\n      setIsAnimating(true);\n      setTimeout(() => {\n        setCurrentIndex((prev) => {\n          if (dir === 'next') {\n            return (prev + DESKTOP_PER_PAGE) % reviews.length;\n          } else {\n            const newIdx = prev - DESKTOP_PER_PAGE;\n            // Round down to nearest even multiple\n            return newIdx < 0\n              ? Math.floor((reviews.length - 1) / DESKTOP_PER_PAGE) * DESKTOP_PER_PAGE\n              : newIdx;\n          }\n        });\n        setIsAnimating(false);\n      }, 280);\n    },\n    [isAnimating, reviews.length]\n  );\n\n  const handleNext = useCallback(() => navigate('next'), [navigate]);\n  const handlePrev = useCallback(() => navigate('prev'), [navigate]);\n\n  // Auto-advance — based on the longer of the two visible reviews\n  useEffect(() => {\n    if (reviews.length <= 1) return;\n    const r1 = reviews[currentIndex];\n    const r2 = reviews[(currentIndex + 1) % reviews.length];\n    const text1 = r1?.snippet || '';\n    const text2 = r2?.snippet || '';\n    const wordCount = Math.max(\n      text1.split(/\\s+/).length,\n      text2.split(/\\s+/).length\n    ) || 10;\n    const readTimeMs = Math.max(5000, (wordCount / 3.33) * 1000 + 2000);\n    const timer = setTimeout(handleNext, readTimeMs);\n    return () => clearTimeout(timer);\n  }, [currentIndex, reviews, handleNext]);\n\n  const review1 = reviews[currentIndex];\n  const review2 = reviews.length > 1 ? reviews[(currentIndex + 1) % reviews.length] : null;\n\n  const progressDuration = (() => {\n    const text1 = review1?.snippet || '';\n    const text2 = review2?.snippet || '';\n    const wordCount = Math.max(\n      text1.split(/\\s+/).length,\n      text2.split(/\\s+/).length\n    ) || 10;\n    return Math.max(5000, (wordCount / 3.33) * 1000 + 2000);\n  })();\n\n  // Desktop page counter: show pair index\n  const desktopPage = Math.floor(currentIndex / DESKTOP_PER_PAGE) + 1;\n  const desktopTotal = Math.ceil(reviews.length / DESKTOP_PER_PAGE);\n\n  // ── Skeleton ──────────────────────────────────────────────────────────────\n  if (loading) {\n    return (\n      <section className=\"py-20\">\n        <style>{`\n          @keyframes testi-shimmer {\n            0%   { background-position: -600px 0; }\n            100% { background-position:  600px 0; }\n          }\n          .testi-skel {\n            background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);\n            background-size: 600px 100%;\n            animation: testi-shimmer 1.6s infinite linear;\n            border-radius: 6px;\n          }\n        `}</style>\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex flex-col gap-6\" style={{ background: 'transparent' }}>\n            <div className=\"testi-skel\" style={{ height: 40, width: 32 }} />\n            <div>\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10 }} />\n              <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10, width: '88%' }} />\n              <div className=\"testi-skel\" style={{ height: 18, width: '70%' }} />\n            </div>\n            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>\n              <div className=\"testi-skel\" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />\n              <div style={{ flex: 1 }}>\n                <div className=\"testi-skel\" style={{ height: 13, width: 110, marginBottom: 8 }} />\n                <div className=\"testi-skel\" style={{ height: 11, width: 80 }} />\n              </div>\n            </div>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  // ── Error / empty ─────────────────────────────────────────────────────────\n  if (error || reviews.length === 0) {\n    return (\n      <section className=\"py-20\">\n        <div className=\"container\">\n          <div className=\"rounded-xl p-10 flex items-center justify-center\" style={{ background: 'transparent' }}>\n            <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>\n          </div>\n        </div>\n      </section>\n    );\n  }\n\n  const isSingleReview = reviews.length === 1;\n\n  // ── Content ───────────────────────────────────────────────────────────────\n  return (\n    <section className=\"py-20\">\n      <style>{`\n        /* ── Layout wrapper ── */\n        .testi-outer {\n          position: relative;\n          overflow: hidden;\n        }\n\n        /* ── Two-column grid on desktop, single on mobile ── */\n        .testi-grid {\n          display: grid;\n          grid-template-columns: 1fr 1fr;\n          gap: 0;\n        }\n        @media (max-width: 768px) {\n          .testi-grid {\n            grid-template-columns: 1fr;\n          }\n          /* Hide second card on mobile */\n          .testi-grid > .testi-review-card:nth-child(2) {\n            display: none;\n          }\n        }\n\n        /* ── Each review card ── */\n        .testi-review-card {\n          background: transparent;\n          padding: 48px 52px;\n          display: flex;\n          flex-direction: column;\n          position: relative;\n        }\n        /* Solo: span both columns so it fills the full width */\n        .testi-review-card--solo {\n          grid-column: 1 / -1;\n        }\n        /* Divider between the two cards on desktop */\n        @media (min-width: 769px) {\n          .testi-grid:not(:has(.testi-review-card--solo)) > .testi-review-card:first-child {\n            border-right: 1px solid #2a2a2a;\n          }\n        }\n\n        @media (max-width: 768px) {\n          .testi-review-card { padding: 24px 0; }\n          .big-quote { font-size: 3.5rem !important; }\n          .testi-quote-text { font-size: 1rem !important; }\n        }\n\n        .big-quote {\n          font-size: 5rem;\n          line-height: 0.7;\n          color: #3B82F6;\n          font-family: Georgia, serif;\n          font-weight: 700;\n          user-select: none;\n          display: block;\n          margin-bottom: 8px;\n        }\n\n        .testi-quote-text {\n          font-family: 'Inter', sans-serif;\n          font-size: clamp(1.05rem, 1.8vw, 1.35rem);\n          font-weight: 400;\n          color: #f0f0f0;\n          line-height: 1.65;\n          letter-spacing: -0.01em;\n          margin: 0;\n          transition: opacity 0.28s ease, transform 0.28s ease;\n          flex: 1;\n        }\n        .testi-quote-text.fading {\n          opacity: 0;\n          transform: translateY(8px);\n        }\n\n        .testi-author-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          margin-top: 32px;\n          padding-top: 20px;\n          transition: opacity 0.28s ease;\n        }\n        .testi-author-row.fading { opacity: 0; }\n\n        .author-avatar {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          object-fit: cover;\n          flex-shrink: 0;\n        }\n        .author-avatar-fallback {\n          width: 56px; height: 56px;\n          border-radius: 50%;\n          display: flex; align-items: center; justify-content: center;\n          font-size: 1.2rem; font-weight: 700; color: white;\n          flex-shrink: 0;\n        }\n\n        .author-info { flex: 1; min-width: 0; }\n        .author-name {\n          font-size: 0.9rem;\n          font-weight: 700;\n          color: #ffffff;\n          margin: 0 0 2px 0;\n          white-space: nowrap;\n          overflow: hidden;\n          text-overflow: ellipsis;\n        }\n        .author-meta {\n          font-size: 0.75rem;\n          color: #A3A3A3;\n          margin: 0;\n        }\n\n        .google-badge {\n          display: flex; align-items: center; gap: 5px;\n          text-decoration: none;\n          padding: 5px 10px;\n          border-radius: 6px;\n          border: 1px solid #404040;\n          background: transparent;\n          transition: border-color 0.2s ease;\n          flex-shrink: 0;\n        }\n        .google-badge:hover { border-color: #0F52BA; }\n        .google-badge-text {\n          font-size: 0.7rem;\n          font-weight: 600;\n          color: #CCCCCC;\n          letter-spacing: 0.04em;\n        }\n\n        .testi-stars {\n          display: flex;\n          gap: 2px;\n          margin-bottom: 6px;\n        }\n\n        /* ── Navigation row — spans full width below both cards ── */\n        .testi-nav-row {\n          display: flex;\n          align-items: center;\n          gap: 12px;\n          padding: 20px 52px 0;\n          border-top: 1px solid #2a2a2a;\n        }\n        @media (max-width: 768px) {\n          .testi-nav-row { padding: 20px 0 0; }\n        }\n\n        .testi-counter {\n          font-size: 0.7rem;\n          color: #A3A3A3;\n          font-variant-numeric: tabular-nums;\n          font-weight: 600;\n          letter-spacing: 0.08em;\n          flex: 1;\n        }\n\n        .testi-arrow-row {\n          display: flex;\n          gap: 8px;\n        }\n\n        .arrow-btn {\n          width: 38px; height: 38px;\n          border-radius: 8px;\n          border: 1px solid #404040;\n          background: transparent;\n          display: flex; align-items: center; justify-content: center;\n          cursor: pointer;\n          color: #ffffff;\n          transition: background 0.2s ease, border-color 0.2s ease;\n        }\n        .arrow-btn:hover {\n          background: #1e1e1e;\n          border-color: #0F52BA;\n        }\n\n        .testi-progress-bar {\n          position: absolute;\n          bottom: 0; left: 0;\n          height: 2px; width: 100%;\n          background: #0F52BA;\n          transform-origin: left;\n        }\n      `}</style>\n\n      <div className=\"container\">\n        <div className=\"testi-outer\">\n          {/* ── Review cards grid ── */}\n          <div className=\"testi-grid\">\n            <ReviewCard\n              review={review1}\n              isAnimating={isAnimating}\n              isSolo={isSingleReview}\n            />\n            {!isSingleReview && review2 && (\n              <ReviewCard\n                review={review2}\n                isAnimating={isAnimating}\n              />\n            )}\n          </div>\n\n          {/* ── Navigation below, full width ── */}\n          {reviews.length > 1 && (\n            <div className=\"testi-nav-row\">\n              <span className=\"testi-counter\">\n                {/* Desktop: show pair page; mobile: show individual */}\n                <span className=\"testi-counter-desktop\" style={{ display: 'none' }}>\n                  {String(desktopPage).padStart(2, '0')} / {String(desktopTotal).padStart(2, '0')}\n                </span>\n                <span className=\"testi-counter-mobile\">\n                  {String(currentIndex + 1).padStart(2, '0')} / {String(reviews.length).padStart(2, '00')}\n                </span>\n              </span>\n              <div className=\"testi-arrow-row\">\n                <button className=\"arrow-btn\" onClick={handlePrev} aria-label=\"Forrige anmeldelse\">\n                  <ArrowLeft />\n                </button>\n                <button className=\"arrow-btn\" onClick={handleNext} aria-label=\"Næste anmeldelse\">\n                  <ArrowRight />\n                </button>\n              </div>\n            </div>\n          )}\n\n          {/* ── Progress bar ── */}\n          {reviews.length > 1 && (\n            <ProgressBar key={currentIndex} duration={progressDuration} />\n          )}\n        </div>\n      </div>\n\n      {/* Counter visibility via CSS (avoids JS media query) */}\n      <style>{`\n        @media (min-width: 769px) {\n          .testi-counter-desktop { display: inline !important; }\n          .testi-counter-mobile  { display: none !important; }\n        }\n      `}</style>\n    </section>\n  );\n};\n\nexport default Testimonials;",
         "filename": "component.tsx",
         "language": "tsx"
       }
