@@ -280,7 +280,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   return (
     <section
-      className={`relative h-screen w-full overflow-hidden flex items-end justify-center pb-8 md:pb-32 ${className}`}
+      className={`relative h-screen w-full overflow-hidden flex items-center justify-center ${className}`}
       style={{ backgroundColor: '#111' }}
     >
       {!skipVideo && (
@@ -333,12 +333,12 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           position:      'absolute',
           inset:         0,
           zIndex:        2,
-          background:    'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)',
+          background:    'linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)',
           pointerEvents: 'none',
         }}
       />
 
-      <div className="relative text-center" style={{ zIndex: 3 }}>
+      <div className="relative text-center w-full" style={{ zIndex: 3 }}>
         <div className="max-w-3xl mx-auto px-4">{children}</div>
       </div>
     </section>
