@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Plus, CreditCard as Edit, Trash2, Save, X, Image as ImageIcon, ThumbsUp, ThumbsDown, Package, Images, ChevronDown, ChevronUp, ArrowUpDown, GripVertical } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Save, X, Image as ImageIcon, Package, Images, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
 import { useData } from '../../contexts/DataContext';
 import ImageUpload from '../ImageUpload';
@@ -27,7 +27,7 @@ const PortfolioManager: React.FC = () => {
     return `linear-gradient(to right, #f97316 0%, #f97316 ${pct}%, #404040 ${pct}%, #404040 100%)`;
   };
 
-  const [newImage, setNewImage] = useState({ title: '', image_url: '' });
+  const [newImage, setNewImage] = useState({ title: '', image_url: '', description: '' });
 
   const [newBundle, setNewBundle] = useState({
     name: '',
@@ -69,7 +69,7 @@ const PortfolioManager: React.FC = () => {
         .insert([{ ...newImage, sort_order: maxSortOrder + 1 }]);
       if (error) throw error;
       toast.success('Portfolio billede tilføjet');
-      setNewImage({ title: '', image_url: '' });
+      setNewImage({ title: '', image_url: '', description: '' });
       setShowAddForm(false);
       await refreshPortfolio();
     } catch (err) {
@@ -233,6 +233,7 @@ const PortfolioManager: React.FC = () => {
           title: editingImage.title,
           image_url: editingImage.image_url,
           image_name: editingImage.image_name || null,
+          description: editingImage.description || null,
           array: editingImage.array ?? 0,
         })
         .eq('id', editingImage.id);
@@ -412,12 +413,10 @@ const PortfolioManager: React.FC = () => {
       </div>
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
           { label: 'Total Billeder', value: portfolioImages.length, icon: <ImageIcon className="text-primary" size={20} /> },
           { label: 'Bundles', value: bundles.length, icon: <Package className="text-primary" size={20} /> },
-          { label: 'Total Likes', value: portfolioImages.reduce((s, i) => s + i.likes, 0), icon: <ThumbsUp className="text-success" size={20} />, cls: 'text-success' },
-          { label: 'Total Dislikes', value: portfolioImages.reduce((s, i) => s + i.dislikes, 0), icon: <ThumbsDown className="text-error" size={20} />, cls: 'text-error' },
         ].map(stat => (
           <div key={stat.label} className="bg-neutral-700/20 rounded-lg p-4">
             <div className="flex items-center justify-between">
@@ -569,6 +568,15 @@ const PortfolioManager: React.FC = () => {
               bucket="portfolio"
             />
           </div>
+          <div>
+            <label className="form-label">Beskrivelse (valgfrit)</label>
+            <textarea
+              value={newImage.description}
+              onChange={(e) => setNewImage({ ...newImage, description: e.target.value })}
+              className="form-input min-h-[80px] resize-y"
+              placeholder="Beskriv dette billede eller projekt..."
+            />
+          </div>
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => { setShowAddForm(false); setNewImage({ title: '', image_url: '' }); }}
@@ -644,12 +652,7 @@ const PortfolioManager: React.FC = () => {
                             </h4>
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center space-x-3">
-                                <span className="flex items-center space-x-1 text-success">
-                                  <ThumbsUp size={12} /><span>{bundleImages.reduce((s, i) => s + i.likes, 0)}</span>
-                                </span>
-                                <span className="flex items-center space-x-1 text-error">
-                                  <ThumbsDown size={12} /><span>{bundleImages.reduce((s, i) => s + i.dislikes, 0)}</span>
-                                </span>
+                                <span className="text-neutral-400">{bundleImages.length} billeder</span>
                               </div>
                               <span className="text-white font-medium flex items-center">
                                 <EditableContent contentKey="portfolio-manager-udvid" fallback="Udvid" /><ChevronDown size={14} className="ml-1" />
@@ -681,12 +684,6 @@ const PortfolioManager: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex items-center space-x-3">
-                            <span className="flex items-center space-x-1 text-success text-sm">
-                              <ThumbsUp size={14} /><span>{bundleImages.reduce((s, i) => s + i.likes, 0)}</span>
-                            </span>
-                            <span className="flex items-center space-x-1 text-error text-sm">
-                              <ThumbsDown size={14} /><span>{bundleImages.reduce((s, i) => s + i.dislikes, 0)}</span>
-                            </span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -736,6 +733,15 @@ const PortfolioManager: React.FC = () => {
                                     onChange={(e) => setEditingImage({ ...editingImage, image_name: e.target.value })}
                                     className="form-input"
                                     placeholder="Valgfrit"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="form-label text-sm">Beskrivelse (valgfrit)</label>
+                                  <textarea
+                                    value={editingImage.description || ''}
+                                    onChange={(e) => setEditingImage({ ...editingImage, description: e.target.value })}
+                                    className="form-input min-h-[80px] resize-y text-sm"
+                                    placeholder="Beskriv dette billede eller projekt..."
                                   />
                                 </div>
                                 {/* Array order */}
@@ -794,10 +800,9 @@ const PortfolioManager: React.FC = () => {
                                   {bundleImage.image_name && (
                                     <p className="text-xs text-neutral-400 mb-2">{bundleImage.image_name}</p>
                                   )}
-                                  <div className="flex items-center space-x-3 text-xs mb-3">
-                                    <span className="flex items-center space-x-1 text-success"><ThumbsUp size={14} /><span>{bundleImage.likes}</span></span>
-                                    <span className="flex items-center space-x-1 text-error"><ThumbsDown size={14} /><span>{bundleImage.dislikes}</span></span>
-                                  </div>
+                                  {bundleImage.description && (
+                                    <p className="text-xs text-neutral-300 mb-2 leading-relaxed line-clamp-2">{bundleImage.description}</p>
+                                  )}
                                   {/* Array order */}
                                   <div className="bg-neutral-800/30 rounded-lg p-3">
                                     <div className="flex items-center mb-2">
@@ -850,6 +855,15 @@ const PortfolioManager: React.FC = () => {
                           value={editingImage.title}
                           onChange={(e) => setEditingImage({ ...editingImage, title: e.target.value })}
                           className="form-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Beskrivelse (valgfrit)</label>
+                        <textarea
+                          value={editingImage.description || ''}
+                          onChange={(e) => setEditingImage({ ...editingImage, description: e.target.value })}
+                          className="form-input min-h-[80px] resize-y"
+                          placeholder="Beskriv dette billede eller projekt..."
                         />
                       </div>
                       <div>
@@ -910,11 +924,10 @@ const PortfolioManager: React.FC = () => {
                       </div>
                       <div className="p-4">
                         <h3 className="font-medium mb-3">{image.title}</h3>
+                        {image.description && (
+                          <p className="text-sm text-neutral-300 mb-3 leading-relaxed line-clamp-2">{image.description}</p>
+                        )}
                         <div className="flex items-center justify-between text-sm mb-3">
-                          <div className="flex items-center space-x-4">
-                            <span className="flex items-center space-x-1 text-success"><ThumbsUp size={16} /><span>{image.likes}</span></span>
-                            <span className="flex items-center space-x-1 text-error"><ThumbsDown size={16} /><span>{image.dislikes}</span></span>
-                          </div>
                           <span className="text-neutral-400">
                             {new Date(image.created_at).toLocaleDateString('da-DK')}
                           </span>
