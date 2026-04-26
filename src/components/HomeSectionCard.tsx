@@ -157,7 +157,7 @@ const HomeSectionCard: React.FC<HomeSectionCardProps> = ({ section, index, isPre
   }
 
   return (
-    <section className="bg-neutral-800 border-0 outline-none py-20">
+    <section className="bg-neutral-800 border-0 outline-none py-10 md:py-20">
       <div className="container">
         <HomeSectionCardInner section={section} index={index} />
       </div>
