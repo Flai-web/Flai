@@ -10,13 +10,13 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
 import { isAddressWithinRange, getFormattedDistance } from '../utils/location';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Coins } from 'lucide-react';
 
 const SimpleRequestPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { products, isProductsLoaded, isSiteContentLoaded } = useData();
-  const { user } = useAuth();
+  const { user, credits } = useAuth();
 
   const prefilledProductId = searchParams.get('product_id');
   const prefilledProductName = searchParams.get('product_name');
@@ -236,6 +236,9 @@ const SimpleRequestPage: React.FC = () => {
     // pay_now is handled by StripePaymentForm
     if (formData.paymentMethod === 'pay_now') return;
 
+    // pay_with_credits is handled by handleCreditsPayment
+    if (formData.paymentMethod === 'pay_with_credits') return;
+
     // Validate address range before submitting
     const addressOk = await validateAddress(formData.customerAddress);
     if (!addressOk) {
@@ -363,6 +366,91 @@ const SimpleRequestPage: React.FC = () => {
     if (data.error) throw new Error(data.error);
 
     return { clientSecret: data.clientSecret, paymentIntentId: data.paymentIntentId };
+  };
+
+  // Handle credits payment
+  const handleCreditsPayment = async () => {
+    if (!validateForm()) {
+      toast.error('Udfyld venligst alle påkrævede felter korrekt');
+      return;
+    }
+
+    const totalPrice = calculateTotalPrice();
+
+    if (credits < totalPrice) {
+      toast.error(`Du har ikke nok credits. Du har ${credits} credits, men ordren koster ${totalPrice} kr.`);
+      return;
+    }
+
+    const addressOk = await validateAddress(formData.customerAddress);
+    if (!addressOk) {
+      toast.error('Adressen er uden for vores dækningsområde');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Create booking
+      const bookingResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-simple-booking-request`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            productId: parseInt(formData.productId),
+            productName: formData.productName,
+            productPrice: formData.productPrice,
+            customerEmail: formData.customerEmail,
+            customerName: formData.customerName,
+            customerAddress: formData.customerAddress,
+            wantsEditing: selectedProduct?.is_editing_included ? true : formData.wantsEditing,
+            paymentMethod: 'credits',
+          }),
+        }
+      );
+
+      if (!bookingResponse.ok) {
+        const errorData = await bookingResponse.json();
+        throw new Error(errorData.error || 'Failed to create booking');
+      }
+
+      const bookingResult = await bookingResponse.json();
+      if (!bookingResult.success) throw new Error(bookingResult.error || 'Failed to create booking');
+
+      // Deduct credits via Supabase
+      const { error: creditsError } = await supabase.rpc('deduct_credits', {
+        user_id: user!.id,
+        amount: totalPrice,
+      });
+
+      if (creditsError) {
+        // Try simple update as fallback
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ credits: credits - totalPrice })
+          .eq('id', user!.id);
+
+        if (updateError) throw new Error('Kunne ikke trække credits fra din konto');
+      }
+
+      // Mark booking as paid with credits
+      await supabase
+        .from('bookings')
+        .update({ payment_status: 'paid', payment_method: 'credits' })
+        .eq('id', bookingResult.bookingId);
+
+      toast.success('🎉 Booking gennemført med credits!');
+      setTimeout(() => navigate('/booking-success'), 2000);
+    } catch (error: any) {
+      console.error('Error paying with credits:', error);
+      toast.error(error.message || 'Der opstod en fejl. Prøv venligst igen.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Use ref instead of state to avoid stale closure — state update is async
@@ -585,6 +673,7 @@ const SimpleRequestPage: React.FC = () => {
               <div className="space-y-3">
                 {[
                   { value: 'pay_now', titleKey: 'simple-payment-now-title', titleFallback: 'Betal Nu', descKey: 'simple-payment-now-description', descFallback: 'Betal med kort eller Klarna.' },
+                  ...(user ? [{ value: 'pay_with_credits', titleKey: 'simple-payment-credits-title', titleFallback: 'Betal med Credits', descKey: 'simple-payment-credits-description', descFallback: `Brug dine credits (${credits} tilgængelige)` }] : []),
                   { value: 'invoice-card', titleKey: 'simple-payment-invoice-title', titleFallback: 'Faktura - Kort', descKey: 'simple-payment-invoice-description', descFallback: 'Betal efter levering' },
                   { value: 'on-site-card', titleKey: 'simple-payment-onsite-title', titleFallback: 'Betaling ved optagelsen', descKey: 'simple-payment-onsite-description', descFallback: 'Kort eller kontant' },
                 ].map(({ value, titleKey, titleFallback, descKey, descFallback }) => (
@@ -626,7 +715,7 @@ const SimpleRequestPage: React.FC = () => {
             )}
 
             {/* Submit — invoice / on-site only */}
-            {formData.paymentMethod !== 'pay_now' && (
+            {formData.paymentMethod !== 'pay_now' && formData.paymentMethod !== 'pay_with_credits' && (
               <div className="flex justify-between">
                 <button type="button" onClick={() => navigate(-1)} className="btn-secondary" disabled={isSubmitting}>
                   <EditableContent contentKey="simple-cancel-button" fallback="Tilbage" />
@@ -641,6 +730,68 @@ const SimpleRequestPage: React.FC = () => {
                     <EditableContent contentKey="simple-submit-button" fallback="Gennemfør booking" />
                   )}
                 </button>
+              </div>
+            )}
+
+            {/* Credits Payment Section */}
+            {formData.paymentMethod === 'pay_with_credits' && (
+              <div className="bg-neutral-800 rounded-xl shadow-md p-6 border border-neutral-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <Coins size={24} className="text-primary" />
+                  <EditableContent contentKey="simple-credits-payment-title" as="h2" className="text-xl font-semibold" fallback="Betal med Credits" />
+                </div>
+                <div className="flex items-center justify-between p-4 bg-neutral-700/50 rounded-lg mb-4">
+                  <span className="text-neutral-300">
+                    <EditableContent contentKey="simple-credits-balance-label" fallback="Din credit saldo:" />
+                  </span>
+                  <span className={`font-bold text-lg ${credits >= totalPrice ? 'text-green-400' : 'text-red-400'}`}>
+                    {credits} credits
+                  </span>
+                </div>
+                {selectedProduct && (
+                  <div className="flex items-center justify-between p-4 bg-neutral-700/50 rounded-lg mb-4">
+                    <span className="text-neutral-300">
+                      <EditableContent contentKey="simple-credits-cost-label" fallback="Ordrebeløb:" />
+                    </span>
+                    <span className="font-bold text-lg text-white">{totalPrice} credits</span>
+                  </div>
+                )}
+                {credits < totalPrice && (
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                    <EditableContent contentKey="simple-credits-insufficient" fallback="Du har ikke nok credits til at gennemføre denne betaling." />
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/buy-credits')}
+                      className="underline hover:text-red-300"
+                    >
+                      <EditableContent contentKey="simple-credits-buy-link" fallback="Køb flere credits" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <button type="button" onClick={() => navigate(-1)} className="btn-secondary" disabled={isSubmitting}>
+                    <EditableContent contentKey="simple-cancel-button" fallback="Tilbage" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreditsPayment}
+                    className="btn-primary flex items-center"
+                    disabled={isSubmitting || credits < totalPrice}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        <EditableContent contentKey="simple-submitting-button" fallback="Sender..." />
+                      </>
+                    ) : (
+                      <>
+                        <Coins size={18} className="mr-2" />
+                        <EditableContent contentKey="simple-credits-pay-button" fallback={`Betal ${totalPrice} credits`} />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </form>
