@@ -465,7 +465,7 @@ const Section_9009b281 = ((
     // ── Skeleton ──────────────────────────────────────────────────────────────
     if (loading) {
       return (
-        <section className="py-20">
+        <section className="py-0">
           <style>{`
             @keyframes testi-shimmer {
               0%   { background-position: -600px 0; }
@@ -502,7 +502,7 @@ const Section_9009b281 = ((
     // ── Error / empty ─────────────────────────────────────────────────────────
     if (error || !review1) {
       return (
-        <section className="py-20">
+        <section className="py-0">
           <div className="container">
             <div className="rounded-xl p-10 flex items-center justify-center" style={{ background: 'transparent' }}>
               <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>
@@ -514,7 +514,7 @@ const Section_9009b281 = ((
 
     // ── Content ───────────────────────────────────────────────────────────────
     return (
-      <section className="py-20">
+      <section className="py-0">
         <style>{`
           .testi-grid {
             display: grid;
@@ -848,7 +848,7 @@ const HomePage: React.FC = () => {
           const CodeComp = CODE_SECTION_COMPONENTS[section.id];
           if (!CodeComp) return null;
           return (
-            <section key={section.id} className="bg-neutral-800 border-0 outline-none p-0 [&>*>section]:!py-10 md:[&>*>section]:!py-20">
+            <section key={section.id} className="bg-neutral-800 border-0 outline-none py-10 md:py-20">
               <div className="w-full">
                 <CodeComp />
               </div>
