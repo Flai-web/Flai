@@ -5,7 +5,6 @@ import {
   Package,
   Image,
   MapPin,
-  Tag,
   Home,
   Clock,
   Mail,
@@ -26,7 +25,6 @@ import HomeSectionsManager from '../components/HomeSectionsManager';
 import ProductsManager from '../components/admin/ProductsManager';
 import PortfolioManager from '../components/admin/PortfolioManager';
 import AddressZonesManager from '../components/admin/AddressZonesManager';
-import DiscountCodesManager from '../components/admin/DiscountCodesManager';
 import BookingsManager from '../components/admin/BookingsManager';
 import NewsletterManager from '../components/admin/NewsletterManager';
 import BookingConfigManager from '../components/admin/BookingConfigManager';
@@ -45,7 +43,6 @@ type TabId =
   | 'products'
   | 'portfolio'
   | 'zones'
-  | 'discounts'
   | 'home-sections'
   | 'newsletter'
   | 'external-images'
@@ -59,7 +56,7 @@ type TabId =
 
 const VALID_SECTIONS = new Set<TabId>([
   'bookings', 'booking-config', 'products', 'portfolio',
-  'zones', 'discounts', 'home-sections', 'newsletter',
+  'zones', 'home-sections', 'newsletter',
   'external-images', 'donations', 'video', 'meilisearch', 'users', 'deploy',
   'seo-documents', 'shop',
 ]);
@@ -72,12 +69,12 @@ const AdminPage: React.FC = () => {
   const navigate = useNavigate();
 
   const {
-    products, portfolioImages, addressZones, discountCodes, bookings,
+    products, portfolioImages, addressZones, bookings,
     refreshProducts, refreshPortfolio, refreshBundles, refreshBookings,
-    refreshDiscountCodes, refreshNewsletters, refreshNewsletterSubscribers, refreshNewsletterTemplates,
+    refreshNewsletters, refreshNewsletterSubscribers, refreshNewsletterTemplates,
     refreshAddressZones,
     isProductsLoaded, isPortfolioLoaded, isBookingsLoaded,
-    isDiscountCodesLoaded, isNewslettersLoaded, isNewsletterSubscribersLoaded, isNewsletterTemplatesLoaded,
+    isNewslettersLoaded, isNewsletterSubscribersLoaded, isNewsletterTemplatesLoaded,
     isAddressZonesLoaded,
   } = useData();
 
@@ -104,7 +101,6 @@ const AdminPage: React.FC = () => {
     if (!isProductsLoaded) refreshProducts();
     if (!isPortfolioLoaded) { refreshPortfolio(); refreshBundles(); }
     if (!isBookingsLoaded) refreshBookings();
-    if (!isDiscountCodesLoaded) refreshDiscountCodes();
     if (!isNewslettersLoaded) refreshNewsletters();
     if (!isNewsletterSubscribersLoaded) refreshNewsletterSubscribers();
     if (!isNewsletterTemplatesLoaded) refreshNewsletterTemplates();
@@ -153,7 +149,6 @@ const AdminPage: React.FC = () => {
     { id: 'portfolio',       label: 'Portfolio',              icon: Image     },
     { id: 'external-images', label: 'Eksterne Billeder',      icon: FileImage },
     { id: 'zones',           label: 'Adressezoner',           icon: MapPin    },
-    { id: 'discounts',       label: 'Rabatkoder',             icon: Tag       },
     { id: 'donations',       label: 'Betalinger',             icon: Wallet    },
     { id: 'newsletter',      label: 'Nyhedsbreve',            icon: Mail      },
     { id: 'video',           label: 'Videoer',                icon: Video     },
@@ -171,7 +166,6 @@ const AdminPage: React.FC = () => {
       case 'products':        return <ErrorBoundary><ProductsManager /></ErrorBoundary>;
       case 'portfolio':       return <ErrorBoundary><PortfolioManager /></ErrorBoundary>;
       case 'zones':           return <ErrorBoundary><AddressZonesManager /></ErrorBoundary>;
-      case 'discounts':       return <ErrorBoundary><DiscountCodesManager /></ErrorBoundary>;
       case 'newsletter':      return <ErrorBoundary><NewsletterManager /></ErrorBoundary>;
       case 'external-images': return <ErrorBoundary><ExternalImagesManager /></ErrorBoundary>;
       case 'home-sections':   return <ErrorBoundary><HomeSectionsManager /></ErrorBoundary>;
