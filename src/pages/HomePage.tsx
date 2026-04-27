@@ -848,7 +848,7 @@ const HomePage: React.FC = () => {
           const CodeComp = CODE_SECTION_COMPONENTS[section.id];
           if (!CodeComp) return null;
           return (
-            <section key={section.id} className="bg-neutral-800 border-0 outline-none py-10 md:py-20">
+            <section key={section.id} className="bg-neutral-800 border-0 outline-none">
               <div className="w-full">
                 <CodeComp />
               </div>
