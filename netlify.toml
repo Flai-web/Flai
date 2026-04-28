@@ -7,6 +7,15 @@ NODE_VERSION = "18"
 NPM_FLAGS = "--legacy-peer-deps"
 NPM_CONFIG_CACHE = "/opt/build/cache/npm"
 
+  # Cache Cypress binary in local node_modules so Netlify preserves it
+  CYPRESS_CACHE_FOLDER = "./node_modules/CypressBinary"
+  
+  # Recommended: set TERM for cleaner terminal logs
+  TERM = "xterm"
+
+[[plugins]]
+  package = "netlify-plugin-cypress"
+
 [[edge_functions]]
 path = "/.netlify/edge-functions/ip-location"
 function = "ip-location"
