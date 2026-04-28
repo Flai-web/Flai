@@ -1,16 +1,36 @@
 /**
- * HeroVideoSection — v13
+ * HeroVideoSection — v14
  *
- * Flicker fix: poster layer is ALWAYS mounted (never conditionally removed),
- * it just transitions opacity to 0. This prevents the 1-frame black gap that
- * occurred when poster unmounted and video faded in during the same React paint.
+ * Changes from v13:
  *
- * Other fixes:
- * - useCallback for setVideoRef no longer depends on videoSrc (prevents
- *   src-reassignment on every render). src is read from a stable ref instead.
- * - z-index model simplified and documented: video=0, poster=1, gradient=2, content=3
- * - markReady() deduped — only one code path calls setVideoReady(true)
- * - visibilitychange handler resets poster correctly via videoReady state
+ * 1. INSTANT poster→video cut (no fade).
+ *    The `transition` on the poster layer is unconditionally `'none'`.
+ *    When videoReady flips true the poster disappears in the same paint frame.
+ *
+ * 2. Removed the `autoplay` HTML attribute from the <video> element.
+ *    Per Mux / Chrome guidance the attribute gives you no error signal and
+ *    behaves inconsistently. We already call el.play() imperatively in the
+ *    ref callback and in attemptPlay(), which returns a catchable Promise.
+ *
+ * 3. `getAutoplayState` default changed 'allowed-muted' → 'unknown'.
+ *    The old default silently skipped the play attempt on iOS Low Power Mode
+ *    and WeChat WebView where even muted autoplay is blocked. Defaulting to
+ *    'unknown' means we always try video.play() and handle rejection properly.
+ *
+ * 4. Slow-connection preload changed 'metadata' → 'none'.
+ *    The src is assigned imperatively; letting the browser pre-fetch metadata
+ *    on a slow connection wastes bytes before the IntersectionObserver fires.
+ *
+ * 5. visibilitychange re-play wrapped in a clearTimeout guard so the attempt
+ *    can't fire after the effect has been torn down.
+ *
+ * Unchanged / confirmed correct by research:
+ * - poster fetchpriority="high" + decoding="sync" (LCP best practice)
+ * - requestVideoFrameCallback used for markReady (now baseline across all
+ *   evergreen browsers: Chrome 83+, Safari 15.4+, Firefox 132+)
+ * - IntersectionObserver threshold:0 (fire on first visible pixel)
+ * - muted + playsinline + loop combo (only reliable autoplay setup)
+ * - video.play() Promise catch + manual play button fallback
  */
 
 import React, {
@@ -43,6 +63,9 @@ function getConnectionInfo() {
   }
 }
 
+// 'unknown' is the safe default: we always attempt play() and handle rejection.
+// Previously defaulting to 'allowed-muted' caused silent failures on iOS Low
+// Power Mode and WeChat WebView where even muted autoplay is blocked.
 type AutoplayState = 'unknown' | 'allowed' | 'allowed-muted' | 'disallowed'
 
 function getAutoplayState(): AutoplayState {
@@ -50,7 +73,7 @@ function getAutoplayState(): AutoplayState {
   if (typeof (navigator as any).getAutoplayPolicy === 'function') {
     return (navigator as any).getAutoplayPolicy('mediaelement') as AutoplayState
   }
-  return 'allowed-muted'
+  return 'unknown'
 }
 
 let _styleInjected = false
@@ -87,7 +110,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   useEffect(() => { injectControlHideStyle() }, [])
 
   const videoRef    = useRef<HTMLVideoElement>(null)
-  // Stable ref for the current video src — avoids re-running setVideoRef on every render
+  // Stable ref for current video src — avoids re-running setVideoRef on every render
   const videoSrcRef = useRef<string>('')
 
   const [videoReady,     setVideoReady]     = useState(false)
@@ -98,16 +121,17 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   const { isSlow, saveData } = useMemo(getConnectionInfo, [])
   const skipVideo  = isSlow || saveData
-  const preloadVal = isSlow ? 'metadata' : 'auto'
+  // On slow connections avoid even metadata pre-fetch — src is assigned imperatively
+  // so there's nothing to gain and it wastes bandwidth before the video is in view.
+  const preloadVal = isSlow ? 'none' : 'auto'
   const autoplayState = useMemo(getAutoplayState, [])
 
   const videoSrc = useMemo(() => cloudinaryMp4Url(publicId), [publicId])
-  // Keep src ref in sync so the ref callback always reads the latest value
   videoSrcRef.current = videoSrc
 
   // ── Ref callback ─────────────────────────────────────────────────────────────
-  // Stable (no deps) — reads src from ref to avoid re-running on every render,
-  // which was causing a brief src-reassignment flicker on Chrome.
+  // Intentionally stable (no deps). Reads src from videoSrcRef to avoid the
+  // brief src-reassignment flicker that occurred when this ran on every render.
   const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
     (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
     if (!el) return
@@ -119,7 +143,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     el.volume = 0
     el.src    = videoSrcRef.current
     el.play().catch(() => {})
-  }, []) // intentionally stable — reads src from ref
+  }, [])
 
   // CMS replacement listener
   useEffect(() => {
@@ -163,9 +187,10 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     let destroyed = false
 
-    // Single path to "ready" — wait for a real painted frame before revealing.
-    // This is the core flicker fix: we only drop the poster once a frame is
-    // actually on screen, so there is never a black gap.
+    // Single code path to "ready". We wait for requestVideoFrameCallback so the
+    // poster is only removed once a real decoded frame has been composited —
+    // eliminating any black-gap frame. rVFC is baseline across all evergreen
+    // browsers (Chrome 83+, Safari 15.4+, Firefox 132+ as of Oct 2024).
     const markReady = () => {
       if (destroyed) return
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
@@ -176,6 +201,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           }
         })
       } else {
+        // Fallback for any browser that still lacks rVFC
         setVideoReady(true)
         setShowPlayButton(false)
       }
@@ -192,6 +218,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         setShowPlayButton(false)
       }).catch(() => {
         if (destroyed) return
+        // Brief grace period before showing the play button — the 'playing'
+        // event may still fire quickly on fast connections.
         revealTimer = window.setTimeout(() => {
           if (destroyed || !video.paused) return
           setShowPlayButton(true)
@@ -210,15 +238,15 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       })
     }
 
-    const onPlaying  = () => markReady()
+    const onPlaying    = () => markReady()
     const onLoadedData = () => { if (!destroyed && video.paused) attemptPlay() }
-    const onError = () => {
+    const onError      = () => {
       if (destroyed || !video.error) return
       console.warn('[HeroVideo] error', video.error.code, video.error.message)
     }
 
-    video.addEventListener('playing',    onPlaying,     { once: true })
-    video.addEventListener('loadeddata', onLoadedData,  { once: true })
+    video.addEventListener('playing',    onPlaying,    { once: true })
+    video.addEventListener('loadeddata', onLoadedData, { once: true })
     video.addEventListener('error',      onError)
 
     if (
@@ -230,6 +258,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     let observer: IntersectionObserver | null = null
     if ('IntersectionObserver' in window) {
+      // threshold:0 fires as soon as a single pixel is visible — fastest trigger.
       observer = new IntersectionObserver(
         (entries) => {
           if (entries[0]?.isIntersecting) {
@@ -260,20 +289,27 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   // ── Tab visibility ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (skipVideo) return
+    let retryTimer: number | undefined
     const handle = () => {
       const video = videoRef.current
       if (!video) return
       if (document.visibilityState === 'hidden') {
+        window.clearTimeout(retryTimer)
         // Drop ready state so poster re-covers on tab return (avoids stale frame)
         setVideoReady(false)
       } else {
         video.muted = true
-        video.play().catch(() => {})
-        // markReady will fire again via 'playing' event
+        retryTimer = window.setTimeout(() => {
+          video.play().catch(() => {})
+          // markReady fires again via the 'playing' event in the main effect
+        }, 0)
       }
     }
     document.addEventListener('visibilitychange', handle)
-    return () => document.removeEventListener('visibilitychange', handle)
+    return () => {
+      window.clearTimeout(retryTimer)
+      document.removeEventListener('visibilitychange', handle)
+    }
   }, [skipVideo])
 
   const handleManualPlay = useCallback(() => {
@@ -285,10 +321,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       .catch(() => {})
   }, [])
 
-  // Poster is ALWAYS rendered — opacity animates to 0 when video is ready.
-  // This keeps a pixel-perfect cover over the video at all times, eliminating
-  // the 1-frame black gap that occurred when the poster unmounted during the
-  // same React paint cycle as the video fade-in.
+  // Poster is ALWAYS rendered and ALWAYS mounted — opacity snaps to 0 instantly
+  // (no transition) when the video is ready. This keeps a pixel-perfect cover
+  // over the video at all times with zero fade delay.
   const posterOpaque = !videoReady || skipVideo
 
   return (
@@ -305,7 +340,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           <video
             key={`${publicId}-${videoKey}`}
             ref={setVideoRef}
-            autoPlay
+            // NOTE: no `autoPlay` HTML attribute — we use video.play() imperatively
+            // so we get a catchable Promise. The HTML attribute offers no error
+            // signal and behaves inconsistently across browsers.
             muted
             loop
             playsInline
@@ -320,27 +357,24 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
             } as any)}
             style={{
               ...FILL_STYLE,
-              // Video is always opacity:1 — the poster on top controls visibility.
-              // No transition needed here; the crossfade lives entirely in the poster.
+              // Video is always opacity:1. The poster on top controls visibility.
               opacity: 1,
             }}
           />
         </div>
       )}
 
-      {/* z=1 — poster layer (always mounted, fades out when video is playing) */}
+      {/* z=1 — poster layer (always mounted, snaps off instantly when video is ready) */}
       <div
         onClick={showPlayButton ? handleManualPlay : undefined}
         aria-hidden="true"
         style={{
           ...FILL_STYLE,
-          zIndex:     1,
-          cursor:     showPlayButton ? 'pointer' : 'default',
-          // Fade out poster to reveal video. Stay mounted so there is never
-          // a frame where neither layer covers the background.
-          opacity:    posterOpaque ? 1 : 0,
-          transition: posterOpaque ? 'none' : 'opacity 0.5s ease',
-          // Once fully transparent, stop intercepting pointer events
+          zIndex:        1,
+          cursor:        showPlayButton ? 'pointer' : 'default',
+          opacity:       posterOpaque ? 1 : 0,
+          // No transition — instant cut from poster to video, as requested.
+          transition:    'none',
           pointerEvents: posterOpaque ? 'auto' : 'none',
         }}
       >
@@ -351,7 +385,10 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           sizes="100vw"
           alt=""
           aria-hidden="true"
+          // fetchpriority="high" is critical: the poster is typically the LCP element.
+          // Only 17% of pages set this despite it being one of the easiest LCP wins.
           {...({ fetchpriority: 'high' } as any)}
+          // decoding="sync" avoids a layout-then-paint gap for above-the-fold images.
           decoding="sync"
           style={{ ...FILL_STYLE }}
         />
