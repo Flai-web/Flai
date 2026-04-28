@@ -16,11 +16,9 @@ NPM_CONFIG_CACHE = "/opt/build/cache/npm"
 [[plugins]]
   package = "netlify-plugin-cypress"
 
-  # Tell the plugin how to start your app and what URL to wait for
   [plugins.inputs]
-    start = "npx vite preview --port 8888"
-    wait-on = "http://localhost:8888"
-    wait-on-timeout = 30
+    # Run after build, against the live deploy preview URL (injected automatically)
+    postBuild = true
 
 [[edge_functions]]
 path = "/.netlify/edge-functions/ip-location"
