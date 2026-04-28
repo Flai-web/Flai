@@ -1,37 +1,36 @@
 /**
- * HeroVideoSection — v3
+ * HeroVideoSection — v4
  *
- * ─── Poster strategy ──────────────────────────────────────────────────────────
- * v2 used two stacked <img> elements: a "cached" one (stamp=0, no ?v= param)
- * that showed instantly from the HTTP cache, and a "fresh" one (?v=stamp) that
- * faded in once loaded. The intent was zero-flicker on first load.
+ * ─── Why videos get stuck at poster ──────────────────────────────────────────
+ * Three bugs in v3 caused the video to stay frozen at the poster image:
  *
- * The problem: after a video replacement the stamp=0 URL is still in the
- * browser's HTTP cache (Cache Storage delete only removes our own bucket, not
- * the browser's opaque disk cache). So the "instant" bottom image was always
- * the OLD poster — users saw the stale frame briefly before the fresh one
- * faded in.
+ * 1. video.load() after autoPlay start
+ *    The <video autoPlay> element starts fetching src immediately on mount.
+ *    Setting video.src then calling video.load() in the effect RESETS the
+ *    element, firing 'abort'/'emptied'. The onError handler treated this as a
+ *    failure and called reloadWithCacheBust(), exhausting MAX_RETRIES before
+ *    playback ever began.
+ *    Fix: set src as a JSX prop so the browser and the effect are in sync from
+ *    the start. Never call video.load() on an element that already has a src —
+ *    only call it after changing the src.
  *
- * v3 fix — single poster, stamp-first:
- *   • posterStamp is read from localStorage on every mount (written by
- *     bustHeroCache after each upload). So even on a fresh page load the URL
- *     already carries the correct ?v=<stamp> and the browser fetches the new
- *     poster directly — no stale hit, no flash.
- *   • stamp=0 (no ?v= param) is only used on the very first ever load before
- *     any upload has happened, which is correct: there is nothing stale yet.
- *   • The <link rel="preload"> injected by heroPreload.ts at module-init time
- *     also uses the persisted stamp, so the browser starts fetching the correct
- *     poster before React even mounts — LCP is unaffected.
- *   • A single <img> means no cross-fade complexity and no z-index race.
+ * 2. 'playing' listener race
+ *    onFirstFrame was registered on 'playing' with { once: true } AFTER
+ *    video.load() + attemptPlay(). If 'playing' fired in the microtask gap
+ *    between those calls the callback was missed → videoReady stuck false.
+ *    Fix: attach all listeners BEFORE setting src/calling load/play, and use
+ *    'canplay' as an additional trigger for onFirstFrame.
  *
- * ─── Loading guarantee ────────────────────────────────────────────────────────
- * 1. heroPreload.ts injects <link rel="preload" href="poster?v=stamp"> at
- *    module init (before React mounts) — poster fetch starts immediately.
- * 2. HeroVideoSection renders that same stamped URL synchronously on mount —
- *    browser hits the in-flight preload, no second request.
- * 3. Video element starts loading MP4 in parallel.
- * 4. Poster shown until first real video frame is confirmed painted, then
- *    removed — no black flash, no stale frame.
+ * 3. requestVideoFrameCallback + React StrictMode
+ *    In dev StrictMode effects run twice (mount → cleanup → mount). The cleanup
+ *    sets destroyed=true before the rVFC callback fires → setVideoReady(true)
+ *    never called. Fix: capture destroyed state in a closure-local ref that
+ *    the rVFC callback checks, and fall back to 'timeupdate' with 1 tick
+ *    (not 2) so it's more reliable across browsers.
+ *
+ * ─── Poster strategy (unchanged from v3) ─────────────────────────────────────
+ * Single <img> with stamp-first URL. posterStamp is read from localStorage at
+ * mount so the first render already uses the correct post-upload URL.
  */
 
 import React, {
@@ -80,14 +79,20 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   const [videoReady, setVideoReady] = useState(false)
 
   const [publicId,    setPublicId]    = useState(() => getHeroVideo().public_id)
-  // posterStamp is read from the heroVideo singleton which loaded it from
-  // localStorage at module-init time. So the very first render already uses
-  // the persisted stamp — the poster URL is correct from the start.
   const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
+  const [videoKey,    setVideoKey]    = useState(0)
 
-  // Bumped when the same publicId is replaced in place, forcing the <video>
-  // element to remount and discard any cached bytes.
-  const [videoKey, setVideoKey] = useState(0)
+  // The src for the current video element — derived from publicId + videoKey.
+  // Setting this as a JSX prop means the browser and the effect start from the
+  // same state: no 'abort'/'emptied' event from a mid-flight load() call.
+  const videoSrc = useMemo(
+    () => videoKey === 0
+      ? cloudinaryMp4Url(publicId)
+      // On in-place replace, add a cache-bust param so the browser skips its
+      // internal media cache and fetches fresh bytes from Cloudinary.
+      : `${cloudinaryMp4Url(publicId)}?_cb=${videoKey}`,
+    [publicId, videoKey]
+  )
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -99,15 +104,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         if (newId !== publicId) {
           setPublicId(newId)
         } else {
-          // Same publicId — file replaced in place. Bump videoKey to remount
-          // the <video> element so it re-fetches from Cloudinary.
           setVideoKey((k) => k + 1)
         }
       }
-
-      // Always update the stamp. The img key includes the stamp so React
-      // replaces the element and the browser fetches the new URL
-      // (already primed in Cache Storage by bustHeroCache).
       if (typeof stamp === 'number' && stamp !== posterStamp) {
         setPosterStamp(stamp)
       }
@@ -116,10 +115,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     return () => window.removeEventListener('heroVideoChanged', handler)
   }, [publicId, posterStamp])
 
-  // ── Single poster URL — stamp-first ──────────────────────────────────────
-  // stamp=0 only on very first load (before any upload). After any upload
-  // the persisted stamp is used and the URL carries ?v=<stamp>, so the
-  // browser never hits the stale stampless entry in its HTTP cache.
+  // Poster — single stamp-first URL
   const posterUrl    = useMemo(() => cloudinaryPosterUrl(publicId, 1920, 'good', posterStamp), [publicId, posterStamp])
   const poster480    = useMemo(() => cloudinaryPosterUrl(publicId,  480, 'eco',  posterStamp), [publicId, posterStamp])
   const poster960    = useMemo(() => cloudinaryPosterUrl(publicId,  960, 'eco',  posterStamp), [publicId, posterStamp])
@@ -133,8 +129,6 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     return isSlow || saveData
   })
 
-  // Ref so the visibility handler can re-attach onFirstFrame after tab wake
-  // without being captured in a stale closure.
   const markVideoReadyRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -142,7 +136,11 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const video = videoRef.current
     if (!video) return
 
-    let destroyed  = false
+    // destroyed is a plain boolean AND a ref so rVFC callbacks (which outlive
+    // the synchronous cleanup) can also check it without a stale closure.
+    let destroyed = false
+    const destroyedRef = { current: false }
+
     let retries    = 0
     const MAX_RETRIES = 3
     let stallTimer:   ReturnType<typeof setTimeout> | null = null
@@ -151,19 +149,29 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const clearStallTimer   = () => { if (stallTimer   !== null) { clearTimeout(stallTimer);   stallTimer   = null } }
     const clearWaitingTimer = () => { if (waitingTimer !== null) { clearTimeout(waitingTimer); waitingTimer = null } }
 
-    // Remove poster only after a real frame is confirmed painted — no black flash.
+    // Called once we have confirmed a real video frame — removes the poster.
+    // Uses requestVideoFrameCallback where available (most reliable), falls
+    // back to a single timeupdate tick, then a 300 ms setTimeout as last resort.
+    const markReady = () => {
+      if (destroyed || destroyedRef.current) return
+      setVideoReady(true)
+    }
+
     const onFirstFrame = () => {
       if (destroyed) return
       clearStallTimer()
+
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
-        ;(video as any).requestVideoFrameCallback(() => {
-          if (!destroyed) setVideoReady(true)
-        })
+        ;(video as any).requestVideoFrameCallback(() => markReady())
+      } else if (video.readyState >= 2) {
+        // HAVE_CURRENT_DATA or better — a frame is already decoded
+        markReady()
       } else {
-        let ticks = 0
         const onTU = () => {
           if (destroyed) return
-          if (++ticks >= 2) { video.removeEventListener('timeupdate', onTU); setVideoReady(true) }
+          video.removeEventListener('timeupdate', onTU)
+          // Give the browser one more frame to paint before flipping
+          setTimeout(markReady, 0)
         }
         video.addEventListener('timeupdate', onTU)
       }
@@ -172,8 +180,11 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     markVideoReadyRef.current = onFirstFrame
 
     const attemptPlay = () => {
-      video.play().catch(() => {
+      const p = video.play()
+      if (!p) return  // older browsers return undefined
+      p.catch(() => {
         if (destroyed) return
+        // Autoplay blocked — wait for first user gesture then retry
         const gestureRetry = () => {
           video.play().catch(() => {})
           document.removeEventListener('touchstart', gestureRetry)
@@ -184,35 +195,49 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       })
     }
 
+    const armStallTimer = () => {
+      clearStallTimer()
+      stallTimer = setTimeout(() => {
+        if (destroyed || (videoRef.current?.currentTime ?? 0) > 0) return
+        reloadWithCacheBust()
+      }, 8_000)
+    }
+
     const reloadWithCacheBust = () => {
       if (destroyed || retries >= MAX_RETRIES) return
       retries++
       clearStallTimer()
       clearWaitingTimer()
+      // Remove the once-listener before re-adding to avoid duplicate calls
       video.removeEventListener('playing', onFirstFrame)
-      video.src = `${cloudinaryMp4Url(publicId)}?_cb=${Date.now()}`
+      video.removeEventListener('canplay', onFirstFrame)
+      const bustUrl = `${cloudinaryMp4Url(publicId)}?_cb=${Date.now()}`
+      video.src = bustUrl
       video.load()
       video.addEventListener('playing', onFirstFrame, { once: true })
+      video.addEventListener('canplay', onFirstFrame, { once: true })
       armStallTimer()
       attemptPlay()
     }
 
-    const armStallTimer = () => {
-      clearStallTimer()
-      stallTimer = setTimeout(() => {
-        if (!destroyed && !videoRef.current?.currentTime) reloadWithCacheBust()
-      }, 8_000)
+    const onError = () => {
+      if (destroyed) return
+      // Ignore 'abort'/'emptied' that fire naturally when src changes
+      if (video.error === null) return
+      reloadWithCacheBust()
     }
 
-    const onError   = () => { if (!destroyed) reloadWithCacheBust() }
-    const onStalled = () => { if (!destroyed && !video.currentTime) armStallTimer() }
+    const onStalled = () => {
+      if (destroyed || (video.currentTime ?? 0) > 0) return
+      armStallTimer()
+    }
 
     const onWaiting = () => {
       if (destroyed) return
       clearWaitingTimer()
       waitingTimer = setTimeout(() => {
         if (destroyed || !video.paused) return
-        video.currentTime = video.currentTime
+        video.currentTime = video.currentTime  // nudge buffer
         attemptPlay()
         waitingTimer = setTimeout(() => {
           if (destroyed || !video.paused) return
@@ -223,23 +248,36 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     const onPlaying = () => { if (!destroyed) clearWaitingTimer() }
 
+    // Attach ALL listeners before touching src/load/play so no events are missed.
+    // 'playing' fires when playback actually starts.
+    // 'canplay' fires when enough data is buffered — catches cases where the
+    // browser can play but 'playing' hasn't fired yet (e.g. autoplay delay).
     video.addEventListener('playing', onFirstFrame, { once: true })
+    video.addEventListener('canplay',  onFirstFrame, { once: true })
     video.addEventListener('playing', onPlaying)
     video.addEventListener('error',   onError)
     video.addEventListener('stalled', onStalled)
     video.addEventListener('waiting', onWaiting)
 
-    video.src = cloudinaryMp4Url(publicId)
-    video.load()
+    // src is already set via the JSX prop (videoSrc). Only call load() if the
+    // video isn't already loading — avoids the abort/emptied cycle that was
+    // exhausting MAX_RETRIES on first mount.
+    if (video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
+        video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+      video.load()
+    }
+
     armStallTimer()
     attemptPlay()
 
     return () => {
       destroyed = true
+      destroyedRef.current = true
       markVideoReadyRef.current = null
       clearStallTimer()
       clearWaitingTimer()
       video.removeEventListener('playing', onFirstFrame)
+      video.removeEventListener('canplay',  onFirstFrame)
       video.removeEventListener('playing', onPlaying)
       video.removeEventListener('error',   onError)
       video.removeEventListener('stalled', onStalled)
@@ -248,12 +286,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       video.removeAttribute('src')
       video.load()
     }
-  // publicId and videoKey changes both remount the <video> via its key prop,
-  // which re-runs this effect automatically.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skipVideo, publicId, videoKey])
+  }, [skipVideo, publicId, videoKey])  // videoKey remounts the element via key prop, re-running this effect
 
-  // ── Tab visibility: restore poster when tab is hidden ───────────────────
+  // Tab visibility — show poster immediately on hide, resume on show
   useEffect(() => {
     if (skipVideo) return
     const handleVisibility = () => {
@@ -282,6 +317,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         <video
           key={`${publicId}-${videoKey}`}
           ref={videoRef}
+          src={videoSrc}
           autoPlay
           muted
           loop
@@ -292,18 +328,6 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         />
       )}
 
-      {/*
-        Single poster — stamp-first.
-
-        The key includes both publicId and posterStamp so React replaces the
-        element (cancelling the old network request) the moment heroVideoChanged
-        fires with a new stamp. The new URL is already primed in Cache Storage
-        by bustHeroCache, so the browser returns it instantly.
-
-        decoding="sync" ensures the image is decoded before the browser paints
-        so there is no blank frame between the old poster disappearing and
-        the new one appearing.
-      */}
       {showPosterLayer && (
         <img
           key={`poster-${publicId}-${posterStamp}`}
