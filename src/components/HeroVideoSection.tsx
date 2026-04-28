@@ -194,16 +194,29 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const markReady = () => {
       if (destroyed) return
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
+        // rVFC fires when the frame is sent to the compositor.
+        // The nested rAF then waits for the *next screen paint* before
+        // pulling the poster — guaranteeing the decoded frame is actually
+        // visible on screen before the poster disappears. This eliminates
+        // the 1-frame black gap that rVFC alone can't fully prevent.
         ;(video as any).requestVideoFrameCallback(() => {
-          if (!destroyed) {
-            setVideoReady(true)
-            setShowPlayButton(false)
-          }
+          requestAnimationFrame(() => {
+            if (!destroyed) {
+              setVideoReady(true)
+              setShowPlayButton(false)
+            }
+          })
         })
       } else {
-        // Fallback for any browser that still lacks rVFC
-        setVideoReady(true)
-        setShowPlayButton(false)
+        // Fallback: two rAFs push past the current paint cycle
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!destroyed) {
+              setVideoReady(true)
+              setShowPlayButton(false)
+            }
+          })
+        })
       }
     }
 
