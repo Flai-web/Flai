@@ -359,7 +359,7 @@ const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
           sizes="100vw"
           alt=""
           aria-hidden="true"
-          {...({ fetchpriority: 'high' } as any)}
+          fetchpriority="high"
           decoding="sync"
           style={{ ...FILL_STYLE }}
         />
