@@ -238,19 +238,26 @@ async function deleteOldHeroCacheEntries(oldPublicId: string): Promise<void> {
 /**
  * primeHeroCacheEntries(publicId, stamp)
  *
- * Fetches the new poster (all sizes) and the first byte of the MP4 with
- * `cache: 'reload'` to force a network trip past any CDN/browser cache,
- * then stores the responses in Cache Storage under 'hero-video-v1'.
+ * Fetches all three poster sizes with `cache: 'reload'` (bypasses the browser
+ * HTTP cache and Cloudinary's CDN edge cache) then stores the fresh responses
+ * in our own Cache Storage bucket.
  *
- * Subsequent page loads served by the service worker (or direct cache.match)
- * will get the fresh bytes immediately without a network round-trip.
+ * Why posters only, not MP4:
+ *   • Storing a 206 Partial Content response for a Range request in Cache
+ *     Storage and then serving it as a full response confuses the browser's
+ *     media pipeline — it expects either a full 200 or a proper range
+ *     negotiation, and a stored 206 satisfies neither.
+ *   • The video element handles its own media cache via the browser's internal
+ *     media resource cache. We do not need to prime it here; the videoKey
+ *     remount (on replace) already forces a fresh fetch past that cache.
+ *   • Posters are images, not streaming media — a full 200 response stored in
+ *     Cache Storage is served correctly by any fetch() call or <img> src.
  */
 async function primeHeroCacheEntries(publicId: string, stamp: number): Promise<void> {
   if (!('caches' in window)) return
   try {
     const cache = await caches.open(HERO_CACHE_NAME)
 
-    // Posters — fetch with cache:reload (bypass CDN/browser) then store
     const posterUrls = [
       cloudinaryPosterUrl(publicId,  480, 'eco',  stamp),
       cloudinaryPosterUrl(publicId,  960, 'eco',  stamp),
@@ -258,21 +265,12 @@ async function primeHeroCacheEntries(publicId: string, stamp: number): Promise<v
     ]
     await Promise.allSettled(
       posterUrls.map(async (url) => {
+        // cache:'reload' forces a real network trip past any CDN or HTTP cache.
+        // The response is a full 200 image — safe to store and serve.
         const res = await fetch(url, { cache: 'reload', credentials: 'omit' })
         if (res.ok) await cache.put(url, res)
       })
     )
-
-    // MP4 — only prime the first 2 MB (enough for immediate playback start).
-    // Full video is too large to cache; the browser's media cache handles the rest.
-    const mp4Url = cloudinaryMp4Url(publicId)
-    const mp4Res = await fetch(mp4Url, {
-      cache:       'reload',
-      credentials: 'omit',
-      headers:     { Range: 'bytes=0-2097151' },  // 2 MB
-    })
-    if (mp4Res.ok || mp4Res.status === 206) await cache.put(mp4Url, mp4Res)
-
   } catch (e) {
     console.warn('[heroPreload] Cache prime failed (non-fatal):', e)
   }
