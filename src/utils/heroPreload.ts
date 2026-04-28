@@ -185,25 +185,35 @@ export function injectPreloadHints(publicId = heroVideo.public_id, stamp = _post
 
   const frag = document.createDocumentFragment()
 
-  // MP4 — primary source, preloaded at high priority
+  // MP4 — primary source, preloaded at high priority.
+  // crossOrigin='anonymous' is required: without it the browser makes a no-CORS
+  // preload fetch, then when the <video> element (CORS) requests the same URL
+  // the cached response is rejected and a second request fires — wasting the preload.
   const mp4Link = document.createElement('link')
-  mp4Link.rel = 'preload'; mp4Link.as = 'video'
-  mp4Link.href = cloudinaryMp4Url(publicId)
-  ;(mp4Link as any).fetchPriority = 'high'
+  mp4Link.rel         = 'preload'
+  mp4Link.as          = 'video'
+  mp4Link.href        = cloudinaryMp4Url(publicId)
+  mp4Link.crossOrigin = 'anonymous'
+  mp4Link.setAttribute('fetchpriority', 'high')
   mp4Link.dataset.heroSlot = 'mp4'
   frag.appendChild(mp4Link)
 
-  // Poster — uses stamp so preload URL matches <img> src
+  // Poster — uses stamp so preload URL exactly matches <img> src.
+  // imageSrcset/imagesizes must be set via setAttribute — assigning them as JS
+  // properties is silently ignored by browsers, so only the 1920w href would
+  // be preloaded regardless of viewport width.
   const posterLink = document.createElement('link')
-  posterLink.rel = 'preload'; posterLink.as = 'image'
-  posterLink.href = cloudinaryPosterUrl(publicId, 1920, 'good', stamp)
-  ;(posterLink as any).imageSrcset = [
+  posterLink.rel         = 'preload'
+  posterLink.as          = 'image'
+  posterLink.href        = cloudinaryPosterUrl(publicId, 1920, 'good', stamp)
+  posterLink.crossOrigin = 'anonymous'
+  posterLink.setAttribute('fetchpriority', 'high')
+  posterLink.setAttribute('imagesrcset', [
     `${cloudinaryPosterUrl(publicId,  480, 'eco',  stamp)} 480w`,
     `${cloudinaryPosterUrl(publicId,  960, 'eco',  stamp)} 960w`,
     `${cloudinaryPosterUrl(publicId, 1920, 'good', stamp)} 1920w`,
-  ].join(', ')
-  ;(posterLink as any).imageSizes = '100vw'
-  ;(posterLink as any).fetchPriority = 'high'
+  ].join(', '))
+  posterLink.setAttribute('imagesizes', '100vw')
   posterLink.dataset.heroSlot = 'poster'
   frag.appendChild(posterLink)
 
@@ -316,26 +326,57 @@ export function bustHeroCache(publicId: string = HERO_PUBLIC_ID): void {
     })
   )
 
-  // 5. Background: delete stale Cache Storage entries, then prime fresh ones.
-  //    Runs off the critical path so it never delays the UI swap above.
+  // 5. Replace Cache Storage entries — delete stale, write fresh.
+  //
+  //    Split into two phases:
+  //    A) Deletion + fetch start: runs in a microtask (Promise.resolve().then)
+  //       so it doesn't block the synchronous dispatch above, but starts
+  //       immediately — the network requests for the new poster begin in the
+  //       same event-loop turn as the UI update.
+  //    B) cache.put (disk write): deferred to requestIdleCallback so it never
+  //       competes with layout/paint caused by the heroVideoChanged event above.
   const capturedStamp = _posterStamp
-  const replaceCacheEntries = async () => {
-    // Delete old entries first (covers same-id replace AND id change)
+
+  Promise.resolve().then(async () => {
+    // Delete stale entries synchronously before starting new fetches, so there
+    // is no window where both old and new entries coexist in the bucket.
     await deleteOldHeroCacheEntries(prevPublicId)
-    // If the public_id changed there may also be old entries under the new id
-    // from a previous session — clean those too before writing fresh ones.
     if (prevPublicId !== publicId) {
       await deleteOldHeroCacheEntries(publicId)
     }
-    // Write fresh entries
-    await primeHeroCacheEntries(publicId, capturedStamp)
-  }
 
-  if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(() => { replaceCacheEntries().catch(() => {}) }, { timeout: 10_000 })
-  } else {
-    setTimeout(() => { replaceCacheEntries().catch(() => {}) }, 3000)
-  }
+    // Start all poster fetches immediately — they run in parallel.
+    // cache.put is deferred so disk I/O doesn't compete with first paint.
+    if (!('caches' in window)) return
+    const posterUrls = [
+      cloudinaryPosterUrl(publicId,  480, 'eco',  capturedStamp),
+      cloudinaryPosterUrl(publicId,  960, 'eco',  capturedStamp),
+      cloudinaryPosterUrl(publicId, 1920, 'good', capturedStamp),
+    ]
+    const fetches = posterUrls.map(url =>
+      fetch(url, { cache: 'reload', credentials: 'omit' })
+        .then(res => ({ url, res }))
+        .catch(() => null)
+    )
+
+    // Defer the cache writes until the browser is idle
+    const writeToCacheWhenIdle = async () => {
+      const cache = await caches.open(HERO_CACHE_NAME).catch(() => null)
+      if (!cache) return
+      const results = await Promise.allSettled(fetches)
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value?.res.ok) {
+          cache.put(r.value.url, r.value.res).catch(() => {})
+        }
+      }
+    }
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => { writeToCacheWhenIdle().catch(() => {}) }, { timeout: 10_000 })
+    } else {
+      setTimeout(() => { writeToCacheWhenIdle().catch(() => {}) }, 1000)
+    }
+  }).catch(() => {})
 }
 
 // ─── Module init ──────────────────────────────────────────────────────────────
