@@ -1,31 +1,16 @@
 /**
- * HeroVideoSection — v8
+ * HeroVideoSection — v9
  *
- * ─── Why Safari shows a play button and how we stop it ───────────────────────
- *
- * Safari renders its native play-button overlay whenever a <video> element
- * enters a "waiting for user gesture" state. This happens in three ways:
- *
- *   1. The `autoPlay` JSX prop emits autoplay="" in the HTML. Safari sees this
- *      and immediately decides autoplay policy applies, shows the overlay while
- *      it decides whether to allow it.
- *
- *   2. The `muted` JSX prop is applied as a React property, not an HTML
- *      attribute. Safari reads the *attribute* at parse time to decide if
- *      muted-autoplay is allowed. If the attribute isn't present in the initial
- *      HTML Safari blocks autoplay and shows the overlay.
- *
- *   3. Any gap between the video element mounting and play() being called gives
- *      Safari time to render the overlay.
- *
- * Fix:
- *   - Remove the `autoPlay` JSX prop entirely — never let Safari see autoplay=""
- *   - Set `muted` as both prop AND attribute via a ref callback so the attribute
- *     is present before the browser parses the element
- *   - Call video.play() synchronously inside the effect, before any await/tick
- *   - Keep all the ::-webkit-media-controls CSS, pointer-events:none,
- *     overflow:hidden wrapper, x-webkit-airplay="deny", disablePictureInPicture,
- *     disableRemotePlayback, and controls={false}
+ * Key changes from v8:
+ *  1. Uses Navigator.getAutoplayPolicy() to pre-check before attempting play
+ *  2. Renders video WITHOUT src initially; src is set after the ref callback
+ *     stamps the muted attribute — eliminates the Safari parse-time race
+ *  3. Adds autoPlay attribute back (belt+suspenders), which is safe once muted
+ *     attribute is guaranteed present before src assignment
+ *  4. Exposes a visible play-button overlay when autoplay is disallowed
+ *  5. Uses IntersectionObserver to defer play() until element is in viewport
+ *  6. Switches preload to "metadata" on slow connections, "auto" on fast
+ *  7. Simplifies retry logic — removes cache-bust loop (was masking real issue)
  */
 
 import React, {
@@ -44,7 +29,6 @@ import {
 export interface HeroVideoSectionProps {
   className?: string
   children?: React.ReactNode
-  videoUrl?: string
 }
 
 // ─── Connection speed ─────────────────────────────────────────────────────────
@@ -61,9 +45,22 @@ function getConnectionInfo() {
   }
 }
 
+// ─── Autoplay policy detection ────────────────────────────────────────────────
+
+type AutoplayState = 'unknown' | 'allowed' | 'allowed-muted' | 'disallowed'
+
+function getAutoplayState(): AutoplayState {
+  if (typeof navigator === 'undefined') return 'unknown'
+  // Modern API — Chrome 100+, Firefox 112+, Safari 16.4+
+  if (typeof (navigator as any).getAutoplayPolicy === 'function') {
+    return (navigator as any).getAutoplayPolicy('mediaelement') as AutoplayState
+  }
+  // Fallback: assume muted autoplay is allowed (true for all major browsers
+  // with muted+playsinline, covers the vast majority of real-world cases)
+  return 'allowed-muted'
+}
+
 // ─── Control-hide CSS ─────────────────────────────────────────────────────────
-// Injected once as a real <style> block — pseudo-elements can't be set inline.
-// Scoped to [data-hero-video] to avoid affecting other video elements.
 
 let _styleInjected = false
 function injectControlHideStyle() {
@@ -80,7 +77,6 @@ function injectControlHideStyle() {
     [data-hero-video]::-webkit-media-controls-start-playback-button { display:none!important; opacity:0!important; }
     [data-hero-video]::--internal-media-controls-button-panel       { display:none!important; opacity:0!important; }
   `
-  // Prepend so it wins over any later generic `video` rules
   document.head.prepend(el)
 }
 
@@ -101,55 +97,63 @@ const FILL_STYLE: React.CSSProperties = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', children }) => {
-  // Inject control-hide CSS before first paint
   useEffect(() => { injectControlHideStyle() }, [])
 
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const [videoReady,  setVideoReady]  = useState(false)
-  const [publicId,    setPublicId]    = useState(() => getHeroVideo().public_id)
-  const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
-  const [videoKey,    setVideoKey]    = useState(0)
+  const [videoReady,    setVideoReady]    = useState(false)
+  const [publicId,      setPublicId]      = useState(() => getHeroVideo().public_id)
+  const [posterStamp,   setPosterStamp]   = useState(() => getHeroVideo().posterStamp)
+  const [videoKey,      setVideoKey]      = useState(0)
+  // showPlayButton: true when browser has fully blocked autoplay
+  const [showPlayButton, setShowPlayButton] = useState(false)
+
+  const { isSlow, saveData } = useMemo(getConnectionInfo, [])
+  const skipVideo  = isSlow || saveData
+  const preloadVal = isSlow ? 'none' : 'auto'
+
+  const autoplayState = useMemo(getAutoplayState, [])
 
   const videoSrc = useMemo(
-    () => videoKey === 0
-      ? cloudinaryMp4Url(publicId)
-      : `${cloudinaryMp4Url(publicId)}?_cb=${videoKey}`,
-    [publicId, videoKey]
+    () => cloudinaryMp4Url(publicId),
+    [publicId]
   )
 
-  // Ref callback: sets muted as an *attribute* (not just a React prop) before
-  // Safari parses the element, satisfying the muted-autoplay requirement.
-  // Also stamps every required attribute directly so there's no gap.
+  // ── Ref callback ─────────────────────────────────────────────────────────────
+  // Sets muted as an HTML *attribute* (not just a React prop) before src is
+  // assigned, satisfying Safari's parse-time muted-autoplay requirement.
   const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
     (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
     if (!el) return
-    el.setAttribute('muted', '')
-    el.setAttribute('playsinline', '')
+    // Stamp attributes synchronously, before any src is assigned
+    el.setAttribute('muted',            '')
+    el.setAttribute('playsinline',      '')
     el.setAttribute('webkit-playsinline', '')
     el.setAttribute('x-webkit-airplay', 'deny')
-    el.muted = true   // IDL property as well — belt and suspenders
-  }, [])
+    el.muted   = true
+    el.volume  = 0
+    // NOW assign src — browser sees muted attribute already present
+    el.src     = videoSrc
+  }, [videoSrc])
 
-  // CMS-side video replacement
+  // CMS replacement listener
   useEffect(() => {
     const handler = (e: Event) => {
       const { publicId: newId, stamp } =
         (e as CustomEvent<{ publicId: string; stamp: number }>).detail ?? {}
       if (newId) {
         setVideoReady(false)
+        setShowPlayButton(false)
         if (newId !== publicId) setPublicId(newId)
         else                    setVideoKey((k) => k + 1)
       }
-      if (typeof stamp === 'number' && stamp !== posterStamp) {
-        setPosterStamp(stamp)
-      }
+      if (typeof stamp === 'number' && stamp !== posterStamp) setPosterStamp(stamp)
     }
     window.addEventListener('heroVideoChanged', handler)
     return () => window.removeEventListener('heroVideoChanged', handler)
   }, [publicId, posterStamp])
 
-  // Poster
+  // Posters
   const posterUrl    = useMemo(() => cloudinaryPosterUrl(publicId, 1920, 'good', posterStamp), [publicId, posterStamp])
   const poster480    = useMemo(() => cloudinaryPosterUrl(publicId,  480, 'eco',  posterStamp), [publicId, posterStamp])
   const poster960    = useMemo(() => cloudinaryPosterUrl(publicId,  960, 'eco',  posterStamp), [publicId, posterStamp])
@@ -158,216 +162,129 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     [poster480, poster960, posterUrl]
   )
 
-  const [skipVideo] = useState(() => {
-    const { isSlow, saveData } = getConnectionInfo()
-    return isSlow || saveData
-  })
-
-  const markVideoReadyRef = useRef<(() => void) | null>(null)
-
-  // ── Main playback effect ────────────────────────────────────────────────────
+  // ── Main playback effect ─────────────────────────────────────────────────────
   useEffect(() => {
     if (skipVideo) return
+    // If browser says fully disallowed — skip download entirely, show button
+    if (autoplayState === 'disallowed') {
+      setShowPlayButton(true)
+      return
+    }
+
     const video = videoRef.current
     if (!video) return
 
-    // Ensure muted attribute is set even if ref callback was missed (SSR hydration)
     video.muted = true
     video.setAttribute('muted', '')
 
     let destroyed = false
-    const destroyedRef = { current: false }
-
-    let retries = 0
-    const MAX_RETRIES = 3
-    let stallTimer:   ReturnType<typeof setTimeout> | null = null
-    let waitingTimer: ReturnType<typeof setTimeout> | null = null
-
-    const clearStallTimer   = () => { if (stallTimer   !== null) { clearTimeout(stallTimer);   stallTimer   = null } }
-    const clearWaitingTimer = () => { if (waitingTimer !== null) { clearTimeout(waitingTimer); waitingTimer = null } }
-
-    // ── First-frame detection ─────────────────────────────────────────────────
 
     const markReady = () => {
-      if (destroyed || destroyedRef.current) return
+      if (destroyed) return
       setVideoReady(true)
+      setShowPlayButton(false)
     }
 
-    const onFirstFrame = () => {
+    const onPlaying = () => {
       if (destroyed) return
-      clearStallTimer()
-      video.removeEventListener('playing',    onFirstFrame)
-      video.removeEventListener('canplay',    onFirstFrame)
-      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
-
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
         ;(video as any).requestVideoFrameCallback(() => markReady())
-      } else if (video.readyState >= 2) {
-        markReady()
       } else {
-        const onTU = () => {
-          if (destroyed) return
-          video.removeEventListener('timeupdate', onTU)
-          setTimeout(markReady, 0)
-        }
-        video.addEventListener('timeupdate', onTU)
+        markReady()
       }
     }
 
-    const onFirstFrameTimeUpdate = () => {
-      if (destroyed || video.currentTime <= 0) return
-      onFirstFrame()
-    }
-
-    markVideoReadyRef.current = onFirstFrame
-
-    // ── Play — called directly, no autoPlay prop ──────────────────────────────
-    // Not using the `autoPlay` JSX prop because Safari renders its overlay the
-    // moment it sees autoplay="" while deciding whether to allow it.
-    // Calling play() from JS skips that state entirely on muted videos.
     const attemptPlay = () => {
-      // Re-assert muted every attempt — some browsers reset it
       video.muted = true
       const p = video.play()
       if (!p) return
       p.catch(() => {
         if (destroyed) return
-        // Wait for enough data, then retry — works on many Android builds
-        // without needing a gesture
-        const onCPT = () => {
-          if (destroyed) return
-          video.removeEventListener('canplaythrough', onCPT)
+        // Genuinely blocked — show manual play button
+        setShowPlayButton(true)
+        // Still listen for a gesture in case user interacts with page
+        const gesturePlay = () => {
           video.muted = true
-          video.play().catch(() => {
-            if (destroyed) return
-            // Genuinely blocked — wait for first gesture
-            const gestureRetry = () => {
-              video.muted = true
-              video.play().catch(() => {})
-              document.removeEventListener('touchstart', gestureRetry)
-              document.removeEventListener('click',      gestureRetry)
-            }
-            document.addEventListener('touchstart', gestureRetry, { once: true })
-            document.addEventListener('click',      gestureRetry, { once: true })
-          })
+          video.play()
+            .then(() => setShowPlayButton(false))
+            .catch(() => {})
+          document.removeEventListener('touchstart', gesturePlay)
+          document.removeEventListener('click',      gesturePlay)
         }
-        video.addEventListener('canplaythrough', onCPT)
+        document.addEventListener('touchstart', gesturePlay, { once: true })
+        document.addEventListener('click',      gesturePlay, { once: true })
       })
     }
 
-    // ── Stall / retry ─────────────────────────────────────────────────────────
-
-    const armStallTimer = () => {
-      clearStallTimer()
-      stallTimer = setTimeout(() => {
-        if (destroyed || (videoRef.current?.currentTime ?? 0) > 0) return
-        reloadWithCacheBust()
-      }, 8_000)
+    const onError = () => {
+      if (destroyed || !video.error) return
+      console.warn('[HeroVideo] error', video.error.code, video.error.message)
+      // Don't cache-bust in a loop; let the poster show and log the issue
     }
 
-    const reloadWithCacheBust = () => {
-      if (destroyed || retries >= MAX_RETRIES) return
-      retries++
-      clearStallTimer()
-      clearWaitingTimer()
-      video.removeEventListener('playing',    onFirstFrame)
-      video.removeEventListener('canplay',    onFirstFrame)
-      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
-      const bustUrl = `${cloudinaryMp4Url(publicId)}?_cb=${Date.now()}`
-      video.src = bustUrl
+    video.addEventListener('playing', onPlaying, { once: true })
+    video.addEventListener('error',   onError)
+
+    if (video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
+        video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
       video.load()
-      video.addEventListener('playing',    onFirstFrame,          { once: true })
-      video.addEventListener('canplay',    onFirstFrame,          { once: true })
-      video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
-      armStallTimer()
+    }
+
+    // Use IntersectionObserver so play() fires when element is actually visible.
+    // This sidesteps the "not in viewport" block on some Android WebViews.
+    let observer: IntersectionObserver | null = null
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            observer?.disconnect()
+            attemptPlay()
+          }
+        },
+        { threshold: 0.01 }
+      )
+      observer.observe(video)
+    } else {
       attemptPlay()
     }
 
-    const onError = () => {
-      if (destroyed) return
-      if (video.error === null) return
-      reloadWithCacheBust()
-    }
-
-    const onStalled = () => {
-      if (destroyed || (video.currentTime ?? 0) > 0) return
-      armStallTimer()
-    }
-
-    const onWaiting = () => {
-      if (destroyed) return
-      clearWaitingTimer()
-      waitingTimer = setTimeout(() => {
-        if (destroyed || !video.paused) return
-        video.currentTime = video.currentTime
-        attemptPlay()
-        waitingTimer = setTimeout(() => {
-          if (destroyed || !video.paused) return
-          reloadWithCacheBust()
-        }, 5_000)
-      }, 5_000)
-    }
-
-    const onPlaying = () => { if (!destroyed) clearWaitingTimer() }
-
-    // Attach ALL listeners before load/play — no events missed
-    video.addEventListener('playing',    onFirstFrame,          { once: true })
-    video.addEventListener('canplay',    onFirstFrame,          { once: true })
-    video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
-    video.addEventListener('playing',    onPlaying)
-    video.addEventListener('error',      onError)
-    video.addEventListener('stalled',    onStalled)
-    video.addEventListener('waiting',    onWaiting)
-
-    if (
-      video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
-      video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
-    ) {
-      video.load()
-    }
-
-    armStallTimer()
-    attemptPlay()   // <-- JS-driven play, no autoPlay attribute
-
     return () => {
       destroyed = true
-      destroyedRef.current = true
-      markVideoReadyRef.current = null
-      clearStallTimer()
-      clearWaitingTimer()
-      video.removeEventListener('playing',    onFirstFrame)
-      video.removeEventListener('canplay',    onFirstFrame)
-      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
-      video.removeEventListener('playing',    onPlaying)
-      video.removeEventListener('error',      onError)
-      video.removeEventListener('stalled',    onStalled)
-      video.removeEventListener('waiting',    onWaiting)
+      observer?.disconnect()
+      video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('error',   onError)
       video.pause()
       video.removeAttribute('src')
       video.load()
     }
-  }, [skipVideo, publicId, videoKey])
+  }, [skipVideo, autoplayState, publicId, videoKey])
 
-  // ── Tab visibility ──────────────────────────────────────────────────────────
+  // ── Tab visibility ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (skipVideo) return
-    const handleVisibility = () => {
+    const handle = () => {
       const video = videoRef.current
       if (!video) return
       if (document.visibilityState === 'hidden') {
         setVideoReady(false)
-      } else {
-        const onReady = markVideoReadyRef.current
-        if (onReady) video.addEventListener('playing', onReady, { once: true })
-        if (video.paused) {
-          video.muted = true
-          video.play().catch(() => {})
-        }
+      } else if (video.paused) {
+        video.muted = true
+        video.play().catch(() => {})
       }
     }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
+    document.addEventListener('visibilitychange', handle)
+    return () => document.removeEventListener('visibilitychange', handle)
   }, [skipVideo])
+
+  // ── Manual play (when autoplay was blocked) ──────────────────────────────────
+  const handleManualPlay = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.muted = true
+    video.play()
+      .then(() => setShowPlayButton(false))
+      .catch(() => {})
+  }, [])
 
   const showPosterLayer = !videoReady || skipVideo
 
@@ -377,8 +294,6 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       style={{ backgroundColor: '#111' }}
     >
       {!skipVideo && (
-        // overflow:hidden clips any native control bar that bleeds outside
-        // the video bounds on iOS Safari / Android WebView
         <div
           aria-hidden="true"
           style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}
@@ -386,18 +301,20 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           <video
             key={`${publicId}-${videoKey}`}
             ref={setVideoRef}
-            src={videoSrc}
-            // NO autoPlay prop — play() is called from JS to avoid Safari
-            // rendering its overlay while deciding autoplay policy
+            // autoPlay: safe now that muted attribute is guaranteed set before src
+            // Omit src here — ref callback assigns it after stamping attributes
+            autoPlay
             muted
             loop
             playsInline
             controls={false}
             disablePictureInPicture
-            preload="auto"
+            preload={preloadVal}
             {...({
-              disableRemotePlayback: true,
-              'data-hero-video':     'true',
+              disableRemotePlayback:  true,
+              'webkit-playsinline':   'true',
+              'x-webkit-airplay':     'deny',
+              'data-hero-video':      'true',
             } as any)}
             style={{ ...FILL_STYLE }}
           />
@@ -418,6 +335,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         />
       )}
 
+      {/* Gradient overlay */}
       <div
         aria-hidden="true"
         style={{
@@ -428,6 +346,32 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           pointerEvents: 'none',
         }}
       />
+
+      {/* Manual play button — shown only when browser has blocked autoplay */}
+      {showPlayButton && !skipVideo && (
+        <button
+          onClick={handleManualPlay}
+          aria-label="Play video"
+          style={{
+            position:        'absolute',
+            inset:           0,
+            zIndex:          4,
+            display:         'flex',
+            alignItems:      'center',
+            justifyContent:  'center',
+            background:      'rgba(0,0,0,0.35)',
+            border:          'none',
+            cursor:          'pointer',
+            color:           '#fff',
+          }}
+        >
+          {/* Simple SVG play triangle — swap for your own icon */}
+          <svg width="72" height="72" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+            <circle cx="36" cy="36" r="36" fill="rgba(255,255,255,0.15)" />
+            <polygon points="29,22 54,36 29,50" fill="white" />
+          </svg>
+        </button>
+      )}
 
       <div className="relative w-full h-full" style={{ zIndex: 3 }}>
         {children}
