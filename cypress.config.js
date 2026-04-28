@@ -2,9 +2,9 @@ const { defineConfig } = require("cypress");
 
 module.exports = defineConfig({
   e2e: {
+    // specPattern must be at the e2e level, NOT inside setupNodeEvents
+    specPattern: "cypress/e2e/**/*.cy.js",
     setupNodeEvents(on, config) {
-      // ADD THIS LINE: It tells Cypress to look for your .cy.js files
-    specPattern: 'cypress/e2e/**/*.cy.js', 
       // implement node event listeners here
     },
     // The Netlify plugin will automatically override this
