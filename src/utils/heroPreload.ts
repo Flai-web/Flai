@@ -212,19 +212,90 @@ export function injectPreloadHints(publicId = heroVideo.public_id, stamp = _post
 
 // ─── Cache busting ────────────────────────────────────────────────────────────
 
+const HERO_CACHE_NAME = 'hero-video-v1'
+
+/**
+ * deleteOldHeroCacheEntries(oldPublicId, newStamp)
+ *
+ * Opens the 'hero-video-v1' Cache Storage bucket and deletes every entry
+ * whose URL belongs to the hero video (poster + MP4 + WebM + HLS).
+ * This is the only reliable way to evict stale bytes — `cache: 'reload'`
+ * only bypasses the cache on that one fetch; it does not delete the old entry,
+ * so a subsequent page load with `cache: 'default'` would still serve stale.
+ */
+async function deleteOldHeroCacheEntries(oldPublicId: string): Promise<void> {
+  if (!('caches' in window)) return
+  try {
+    const cache = await caches.open(HERO_CACHE_NAME)
+    const keys  = await cache.keys()
+    const toDelete = keys.filter(req => req.url.includes(oldPublicId))
+    await Promise.all(toDelete.map(req => cache.delete(req)))
+  } catch (e) {
+    console.warn('[heroPreload] Cache delete failed (non-fatal):', e)
+  }
+}
+
+/**
+ * primeHeroCacheEntries(publicId, stamp)
+ *
+ * Fetches the new poster (all sizes) and the first byte of the MP4 with
+ * `cache: 'reload'` to force a network trip past any CDN/browser cache,
+ * then stores the responses in Cache Storage under 'hero-video-v1'.
+ *
+ * Subsequent page loads served by the service worker (or direct cache.match)
+ * will get the fresh bytes immediately without a network round-trip.
+ */
+async function primeHeroCacheEntries(publicId: string, stamp: number): Promise<void> {
+  if (!('caches' in window)) return
+  try {
+    const cache = await caches.open(HERO_CACHE_NAME)
+
+    // Posters — fetch with cache:reload (bypass CDN/browser) then store
+    const posterUrls = [
+      cloudinaryPosterUrl(publicId,  480, 'eco',  stamp),
+      cloudinaryPosterUrl(publicId,  960, 'eco',  stamp),
+      cloudinaryPosterUrl(publicId, 1920, 'good', stamp),
+    ]
+    await Promise.allSettled(
+      posterUrls.map(async (url) => {
+        const res = await fetch(url, { cache: 'reload', credentials: 'omit' })
+        if (res.ok) await cache.put(url, res)
+      })
+    )
+
+    // MP4 — only prime the first 2 MB (enough for immediate playback start).
+    // Full video is too large to cache; the browser's media cache handles the rest.
+    const mp4Url = cloudinaryMp4Url(publicId)
+    const mp4Res = await fetch(mp4Url, {
+      cache:       'reload',
+      credentials: 'omit',
+      headers:     { Range: 'bytes=0-2097151' },  // 2 MB
+    })
+    if (mp4Res.ok || mp4Res.status === 206) await cache.put(mp4Url, mp4Res)
+
+  } catch (e) {
+    console.warn('[heroPreload] Cache prime failed (non-fatal):', e)
+  }
+}
+
 /**
  * bustHeroCache(publicId)
  *
- * Synchronously invalidates all hero video + poster caches for the CURRENT TAB.
- * Other tabs in the same browser are notified via the 'storage' event (above).
- * Other users/browsers are notified via Supabase Realtime (heroSync.ts).
+ * Full cache replacement for the CURRENT TAB:
+ *   1. Bumps the stamp → new poster URLs → forces React to swap <img> src
+ *   2. Writes stamp to localStorage → other same-browser tabs sync via 'storage'
+ *   3. Mutates the heroVideo singleton so any component that reads it is current
+ *   4. Updates <link rel="preload"> hints for the next navigation
+ *   5. Fires 'heroVideoChanged' → HeroVideoSection remounts/reloads immediately
+ *   6. In background (rIC): DELETE old Cache Storage entries, then PRIME new ones
+ *      so future page loads and service-worker fetches serve fresh bytes.
  *
- * Call order (VideoManager does all three):
- *   1. bustHeroCache(result.public_id)   ← this file, current tab
- *   2. broadcastHeroUpdate(result.public_id)  ← heroSync.ts, all other users
+ * Other users/browsers are notified via heroSync.ts (Supabase Realtime).
  */
 export function bustHeroCache(publicId: string = HERO_PUBLIC_ID): void {
   if (typeof window === 'undefined') return
+
+  const prevPublicId = heroVideo.public_id
 
   // 1. New stamp → all poster src URLs change → forces browser re-fetch
   _posterStamp = Date.now()
@@ -247,22 +318,25 @@ export function bustHeroCache(publicId: string = HERO_PUBLIC_ID): void {
     })
   )
 
-  // 5. Background: warm HTTP cache so CDN serves fresh bytes on next hard load.
-  //    Runs off the critical path in requestIdleCallback.
-  const warmCache = () => {
-    const opts: RequestInit = { method: 'GET', cache: 'reload', credentials: 'omit' }
-    Promise.allSettled([
-      fetch(cloudinaryMp4Url(publicId), { ...opts, headers: { Range: 'bytes=0-0' } }),
-      fetch(cloudinaryPosterUrl(publicId,  480, 'eco',  _posterStamp), opts),
-      fetch(cloudinaryPosterUrl(publicId,  960, 'eco',  _posterStamp), opts),
-      fetch(cloudinaryPosterUrl(publicId, 1920, 'good', _posterStamp), opts),
-    ]).catch(() => {})
+  // 5. Background: delete stale Cache Storage entries, then prime fresh ones.
+  //    Runs off the critical path so it never delays the UI swap above.
+  const capturedStamp = _posterStamp
+  const replaceCacheEntries = async () => {
+    // Delete old entries first (covers same-id replace AND id change)
+    await deleteOldHeroCacheEntries(prevPublicId)
+    // If the public_id changed there may also be old entries under the new id
+    // from a previous session — clean those too before writing fresh ones.
+    if (prevPublicId !== publicId) {
+      await deleteOldHeroCacheEntries(publicId)
+    }
+    // Write fresh entries
+    await primeHeroCacheEntries(publicId, capturedStamp)
   }
 
   if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(warmCache, { timeout: 10_000 })
+    requestIdleCallback(() => { replaceCacheEntries().catch(() => {}) }, { timeout: 10_000 })
   } else {
-    setTimeout(warmCache, 3000)
+    setTimeout(() => { replaceCacheEntries().catch(() => {}) }, 3000)
   }
 }
 
