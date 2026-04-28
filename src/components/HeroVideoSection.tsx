@@ -46,15 +46,26 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   const [publicId,    setPublicId]    = useState(() => getHeroVideo().public_id)
   const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
+  // videoKey is bumped whenever a cache-bust arrives for the *same* publicId
+  // (i.e. the hero video file was replaced in place). This forces React to
+  // remount the <video key={videoKey}> element so the browser discards the
+  // stale cached bytes and fetches the new file.
+  const [videoKey, setVideoKey] = useState(0)
 
   useEffect(() => {
     const handler = (e: Event) => {
       const { publicId: newId, stamp } =
         (e as CustomEvent<{ publicId: string; stamp: number }>).detail ?? {}
-      if (newId && newId !== publicId) {
+      if (newId) {
         setVideoReady(false)
         setPosterReady(false)
-        setPublicId(newId)
+        if (newId !== publicId) {
+          setPublicId(newId)
+        } else {
+          // Same publicId but the file was replaced — bump the key to force
+          // the <video> element to remount and re-fetch from Cloudinary.
+          setVideoKey((k) => k + 1)
+        }
       }
       if (typeof stamp === 'number') {
         setPosterReady(false)
@@ -285,7 +296,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     >
       {!skipVideo && (
         <video
-          key={publicId}
+          key={`${publicId}-${videoKey}`}
           ref={videoRef}
           autoPlay
           muted
