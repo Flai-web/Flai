@@ -33,6 +33,13 @@
  *     video is served optimally regardless of when it was uploaded.
  *
  *  4. CHUNKED upload (6 MB chunks) — reliable for any file size.
+ *
+ * ─── Cache invalidation ───────────────────────────────────────────────────────
+ *  After a successful upload/replace, two things happen:
+ *    A) bustHeroCache()         — updates the current tab immediately
+ *    B) broadcastHeroUpdate()   — pushes a Supabase Realtime event to every
+ *                                 other connected browser/tab so they also see
+ *                                 the new video without a page reload
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -51,6 +58,7 @@ import {
   cloudinaryWebmUrl,
   bustHeroCache,
 } from '../../utils/heroPreload';
+import { broadcastHeroUpdate } from '../../utils/heroSync';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -64,48 +72,12 @@ const EDGE_KEY = 't4fr3ZXEo_duMoZiGY_FqtFWUfw';
 /** Chunk size for chunked uploads — 6 MB is well within Cloudinary's limits */
 const CHUNK_SIZE_BYTES = 6 * 1024 * 1024;
 
-// ─── Cloudinary eager transformation presets ──────────────────────────────────
-//
-// IMPORTANT: `eager` cannot be sent in unsigned upload requests.
-// Two-pronged approach used here:
-//
-//  A) UPLOAD PRESET (Cloudinary Dashboard → Settings → Upload → Herovideo):
-//     Configure these in the preset's Transform tab so they run automatically
-//     on every upload:
-//       • Eager: sp_hd/f_m3u8
-//       • Eager: f_mp4,q_auto:good,vc_h264
-//       • Eager: f_webm,q_auto:good,vc_vp9
-//       • Eager: f_jpg,q_auto:good,so_0,w_1280
-//       • eager_async: true  (set in preset so large videos don't time out)
-//       • overwrite: true    (needed for replace flow)
-//
-//  B) POST-UPLOAD EXPLICIT CALL via Supabase edge function (signed):
-//     After a successful upload the client fires a POST ?eager=1&id=<public_id>
-//     to the edge function which calls Cloudinary's signed `explicit` endpoint
-//     with the same transformations — ensuring they are pre-warmed even if the
-//     preset config is incomplete.
-//
-// The EAGER_ALL string below is used by the edge function's explicit call.
-
 const EAGER_ALL = [
-  // HLS — sp_hd pre-generates multi-bitrate rungs server-side.
-  // Use sp_hd here (eager context) NOT sp_auto — sp_auto is for delivery URLs.
   'sp_hd/f_m3u8',
-  // MP4 H.264 — params alphabetized per Cloudinary requirement
   'f_mp4,q_auto:good,vc_h264',
-  // WebM VP9 — best compression for Chrome/Firefox
   'f_webm,q_auto:good,vc_vp9',
-  // Poster — JPEG always derived synchronously (no 404 risk unlike f_auto/.webp)
   'f_jpg,q_auto:good,so_0,w_1280',
 ].join('|');
-
-// ─── Optimised delivery URL builders ──────────────────────────────────────────
-//
-// All delivery URLs carry compression + format params so even assets that
-// were uploaded before this update are served optimally.
-
-// URL builders are imported from heroPreload — single source of truth so
-// VideoManager, HeroVideoSection and bustHeroCache all use identical URLs.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,15 +119,6 @@ const edgeFetch = async (path: string, init: RequestInit = {}) => {
 };
 
 // ─── Chunked upload ───────────────────────────────────────────────────────────
-//
-// Protocol: POST /video/upload with Content-Range + X-Unique-Upload-Id headers.
-// Each chunk carries the same preset, public_id and context.
-// The final chunk response contains the full asset metadata.
-//
-// NOTE: `eager`, `eager_async`, `overwrite` and `invalidate` are NOT allowed
-// in unsigned upload requests. They must be configured in the Cloudinary
-// upload preset (Dashboard → Settings → Upload → Presets → Herovideo →
-// Transform tab). See: https://cloudinary.com/documentation/upload_presets
 
 interface UploadResult { public_id: string }
 
@@ -185,7 +148,6 @@ async function cldUpload(
     fd.append('upload_preset', UPLOAD_PRESET);
     fd.append('public_id', opts.publicId.replace(/^.*\//, ''));
     fd.append('asset_folder', 'Herovideo');
-    // context is allowed in unsigned uploads
     if (opts.caption || opts.alt) {
       const parts: string[] = [];
       if (opts.caption) parts.push(`caption=${opts.caption}`);
@@ -238,7 +200,7 @@ const EagerBadge: React.FC<{ publicId: string }> = ({ publicId }) => {
 
   useEffect(() => {
     let attempts = 0;
-    const maxAttempts = 36; // 36 × 5 s = 3 min
+    const maxAttempts = 36;
     const url = cloudinaryHlsUrl(publicId);
 
     const check = async () => {
@@ -298,7 +260,6 @@ const AssignModal: React.FC<{ video: CldVideo; onClose: () => void }> = ({ video
   const { updateContent } = useSiteContent();
   const [key, setKey]       = useState('');
   const [saving, setSaving] = useState(false);
-  // Always store the optimised HLS URL so hero gets compression for free
   const url = cloudinaryHlsUrl(video.public_id);
 
   const handleAssign = async () => {
@@ -465,19 +426,22 @@ const UploadModal: React.FC<{ onClose: () => void; onCreated: (v: CldVideo) => v
       setStage('done');
       toast.success('Video uploadet — Cloudinary optimerer nu i baggrunden…');
 
-      // Fire-and-forget: ask the signed edge function to call Cloudinary's
-      // `explicit` endpoint so HLS/MP4/WebM/poster are pre-generated now.
+      // Fire-and-forget: pre-warm eager derivatives server-side.
       edgeFetch(
         `?eager=1&id=${encodeURIComponent(result.public_id)}`,
         { method: 'POST' }
       ).catch((e) => console.warn('Eager pre-warm failed (non-fatal):', e.message));
 
-      // If this is the hero video, bust the browser's cached poster + manifest
-      // so HeroVideoSection shows the new video on next load — zero speed impact
-      // (runs in requestIdleCallback, fully off the critical path).
-      if (/herovideo/i.test(result.public_id)) {
-        bustHeroCache(result.public_id);
-      }
+      // ── Cache invalidation ──────────────────────────────────────────────────
+      // A) Bust the current tab immediately — updates poster stamp + dispatches
+      //    'heroVideoChanged' so HeroVideoSection reacts without a page reload.
+      bustHeroCache(result.public_id);
+
+      // B) Broadcast to every other connected browser/tab via Supabase Realtime.
+      //    Their HeroVideoSection will swap the video within ~100 ms.
+      broadcastHeroUpdate(result.public_id).catch((e) =>
+        console.warn('heroSync broadcast failed (non-fatal):', e)
+      );
 
       const newVideo: CldVideo = {
         public_id:    result.public_id,
@@ -537,10 +501,8 @@ const UploadModal: React.FC<{ onClose: () => void; onCreated: (v: CldVideo) => v
             <Dropzone file={file} onChange={setFile} disabled={isBusy || isDone} />
           </div>
 
-          {/* Compression info shown before upload */}
           {!isBusy && !isDone && <CompressionInfoPanel />}
 
-          {/* Upload progress */}
           {(isBusy || isDone) && (
             <ProgressBar
               pct={isDone ? 100 : pct}
@@ -549,7 +511,6 @@ const UploadModal: React.FC<{ onClose: () => void; onCreated: (v: CldVideo) => v
             />
           )}
 
-          {/* Eager processing status after done */}
           {isDone && newPublicId && (
             <div className="flex items-center gap-2 text-xs text-neutral-400">
               <EagerBadge publicId={newPublicId} />
@@ -608,8 +569,6 @@ const ReplaceVideoModal: React.FC<{
     const savedPublicId = video.public_id;
     const savedCaption  = title(video);
     const savedAlt      = video.context?.custom?.alt ?? '';
-    // In dynamic folder mode public_id is already bare (no folder prefix).
-    // The replace is a no-op but kept as a safety guard.
     const savedBareId   = savedPublicId.replace(/^.*\//, '');
 
     try {
@@ -619,9 +578,7 @@ const ReplaceVideoModal: React.FC<{
         { method: 'DELETE' }
       );
 
-      // Step 2 — re-upload to same public_id.
-      // overwrite/invalidate cannot be sent in unsigned requests — they must
-      // be enabled in the upload preset (Herovideo preset → overwrite: true).
+      // Step 2 — re-upload to same public_id
       await cldUpload(file, {
         publicId:   savedBareId,
         onProgress: setPct,
@@ -630,18 +587,20 @@ const ReplaceVideoModal: React.FC<{
         alt:        savedAlt,
       });
 
-      // Step 3 — fire-and-forget: ask the edge function to call Cloudinary's
-      // signed `explicit` endpoint so eager transformations (HLS/MP4/WebM/poster)
-      // are pre-generated server-side now. The edge function holds the API secret.
+      // Step 3 — fire-and-forget: pre-warm eager derivatives
       edgeFetch(
         `?eager=1&id=${encodeURIComponent(savedPublicId)}`,
         { method: 'POST' }
       ).catch((e) => console.warn('Eager pre-warm failed (non-fatal):', e.message));
 
-      // Bust the browser's cached hero poster + HLS manifest so HeroVideoSection
-      // displays the new video immediately on next visit — runs in rIC, zero
-      // impact on loading speed.
+      // ── Cache invalidation ──────────────────────────────────────────────────
+      // A) Bust the current tab immediately.
       bustHeroCache(savedPublicId);
+
+      // B) Broadcast to every other connected browser/tab via Supabase Realtime.
+      broadcastHeroUpdate(savedPublicId).catch((e) =>
+        console.warn('heroSync broadcast failed (non-fatal):', e)
+      );
 
       setReplacedId(savedPublicId);
       setStage('done');
@@ -676,7 +635,6 @@ const ReplaceVideoModal: React.FC<{
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Hero / public_id notice */}
           <div className={`rounded-xl p-3 flex items-start gap-2 border ${hero ? 'bg-primary/10 border-primary/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
             <AlertCircle size={15} className={`shrink-0 mt-0.5 ${hero ? 'text-primary' : 'text-amber-400'}`} />
             <div className="text-xs space-y-1">
@@ -687,7 +645,6 @@ const ReplaceVideoModal: React.FC<{
             </div>
           </div>
 
-          {/* Compression info */}
           {!isBusy && !isDone && <CompressionInfoPanel isHeroVideo={hero} />}
 
           <div>
@@ -897,7 +854,6 @@ const VideoRow: React.FC<{
             <p className="text-sm text-neutral-400">{video.context.custom.alt}</p>
           )}
 
-          {/* Optimised URL row — shows HLS URL with compression params baked in */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 bg-neutral-900/60 rounded-lg px-3 py-2 flex-1 min-w-0 border border-neutral-700">
               <Zap size={11} className="text-amber-400 shrink-0" title="URL inkluderer q_auto + sp_hd HLS" />
