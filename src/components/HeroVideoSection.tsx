@@ -1,34 +1,43 @@
 /**
- * HeroVideoSection — v6
+ * HeroVideoSection — v7
  *
- * ─── Speed improvements over v5 ──────────────────────────────────────────────
+ * ─── Fixes regression introduced in v6 ───────────────────────────────────────
  *
- * 1. DNS prefetch + preconnect injected at MODULE LOAD TIME (not in useEffect)
- *    The browser resolves res.cloudinary.com DNS and opens a TLS connection
- *    before React even hydrates. On a cold load this saves ~150–300 ms.
+ * v6 added three changes that together caused "stuck at poster":
  *
- * 2. <link rel="preload" as="video"> injected as early as possible
- *    Called synchronously inside useMemo (first render) so the browser starts
- *    fetching video bytes at highest network priority in parallel with React
- *    rendering. Without this the browser doesn't discover the src until after
- *    the first paint, costing 1–2 full render cycles.
+ * BUG 1 — onLoadedData calling onFirstFrame too early
+ *   onLoadedData fired when readyState >= 2 (HAVE_CURRENT_DATA) and called
+ *   onFirstFrame(), which called markReady() immediately. On most browsers
+ *   readyState is already >= 2 at loadeddata time even before play() has been
+ *   called, so the poster was removed before the video was actually playing,
+ *   revealing a frozen first frame. Then onFirstFrame also removed the 'playing'
+ *   { once:true } listener — so when play() did start nothing called markReady
+ *   again.
+ *   Fix: onLoadedData ONLY cancels the stall timer. It never calls onFirstFrame.
+ *   onFirstFrame is triggered only by 'playing', 'canplay', or timeupdate > 0.
  *
- * 3. readyState fast-path on mount
- *    If the video element already has buffered data (BF-cache restore, or the
- *    preload link caused the browser to buffer before the effect ran) we skip
- *    the event-listener path entirely and call markReady() synchronously.
+ * BUG 2 — { once: true } on loadeddata conflicting with manual removeEventListener
+ *   onFirstFrame tried to removeEventListener('loadeddata', onLoadedData) but
+ *   the listener was registered with { once: true } so the browser may have
+ *   already auto-removed it. The removeEventListener call became a no-op on the
+ *   second invocation path, leaving ghost state.
+ *   Fix: register loadeddata WITHOUT { once: true } and remove it explicitly
+ *   in both onFirstFrame and the cleanup function.
  *
- * 4. 'loadeddata' cancels the stall timer
- *    The browser has the first frame decoded → a network stall is impossible
- *    at that point. Cancelling the timer avoids a spurious cache-bust reload.
+ * BUG 3 — Fast-path returned early without attaching recovery listeners
+ *   If readyState >= 3 on mount but play() was blocked (autoplay policy), the
+ *   early-return cleanup left no 'playing' listener and no canplaythrough retry,
+ *   so the video would never transition out of poster state.
+ *   Fix: remove the separate fast-path early-return entirely. Instead, check
+ *   readyState AFTER attaching all listeners. If >= 3, call markReady() + play()
+ *   immediately — but keep all listeners in place for recovery.
  *
- * 5. Stall timeout 8 s → 5 s
- *    Cloudinary CDN responds in <200 ms under normal conditions. 5 s is still
- *    safe for 3G mobile while recovering ~3 s sooner on a real stall.
- *
- * 6. Controls fully suppressed (carried over from v5)
- *    controls={false}, disablePictureInPicture, disableRemotePlayback,
- *    pointer-events:none, and injected ::-webkit-media-controls CSS.
+ * ─── Speed improvements retained from v6 ────────────────────────────────────
+ *   - DNS prefetch + preconnect at module load time
+ *   - <link rel="preload" as="video"> injected in useMemo (first render)
+ *   - loadeddata cancels stall timer (without triggering markReady)
+ *   - Stall timeout 5 s
+ *   - Controls fully suppressed
  */
 
 import React, {
@@ -64,7 +73,8 @@ function getConnectionInfo() {
 }
 
 // ─── One-time module-level network hints ─────────────────────────────────────
-// Runs before React hydrates — gives the browser maximum lead time.
+// Runs before React hydrates — gives the browser maximum lead time to open
+// a connection to Cloudinary before any fetch is issued.
 ;(function injectNetworkHints() {
   if (typeof document === 'undefined') return
   const head = document.head
@@ -90,14 +100,14 @@ function getConnectionInfo() {
 })()
 
 // ─── <link rel="preload" as="video"> ─────────────────────────────────────────
-// Injected on first render (via useMemo) so the browser fetches video bytes
-// at max priority before the <video> element even mounts.
+// Injected synchronously inside useMemo on first render so the browser starts
+// fetching the video at maximum priority before <video> even mounts.
 let _preloadEl: HTMLLinkElement | null = null
 
 function injectVideoPreload(src: string) {
   if (typeof document === 'undefined') return
   if (_preloadEl) {
-    if (_preloadEl.getAttribute('href') === src) return  // already correct
+    if (_preloadEl.getAttribute('href') === src) return
     _preloadEl.remove()
     _preloadEl = null
   }
@@ -112,8 +122,8 @@ function injectVideoPreload(src: string) {
 }
 
 // ─── Control-hide CSS ─────────────────────────────────────────────────────────
-// Must be a real stylesheet rule — pseudo-elements can't be targeted via style={}
-
+// Must be a real stylesheet rule — ::-webkit-media-controls can't be targeted
+// via the style attribute.
 const CONTROL_HIDE_CSS = `
   video::-webkit-media-controls                       { display: none !important; }
   video::-webkit-media-controls-enclosure             { display: none !important; }
@@ -141,7 +151,7 @@ const FILL_STYLE: React.CSSProperties = {
   objectFit:      'cover',
   objectPosition: 'center',
   display:        'block',
-  pointerEvents:  'none',   // prevent tap from triggering iOS overlay play button
+  pointerEvents:  'none',
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -156,11 +166,11 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
   const [videoKey,    setVideoKey]    = useState(0)
 
-  // Derive video src. Injects preload link immediately on every src change.
+  // Inject preload link synchronously on every src change (first render included).
   const videoSrc = useMemo(() => {
     const base = cloudinaryMp4Url(publicId)
     const src  = videoKey === 0 ? base : `${base}?_cb=${videoKey}`
-    injectVideoPreload(src)   // called synchronously — browser starts fetching now
+    injectVideoPreload(src)
     return src
   }, [publicId, videoKey])
 
@@ -218,21 +228,28 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const clearWaitingTimer = () => { if (waitingTimer !== null) { clearTimeout(waitingTimer); waitingTimer = null } }
 
     // ── First-frame detection ─────────────────────────────────────────────────
+    // markReady() is the ONLY place setVideoReady(true) is called.
+    // It must only be called once we are CERTAIN a frame is actually painting.
     const markReady = () => {
       if (destroyed || destroyedRef.current) return
       setVideoReady(true)
     }
 
+    // onFirstFrame is triggered by 'playing', 'canplay', or timeupdate > 0.
+    // It deregisters all sibling triggers then waits for a real painted frame.
     const onFirstFrame = () => {
       if (destroyed) return
       clearStallTimer()
 
-      // Deregister all sibling triggers to prevent double-firing
+      // Deregister all sibling triggers — only the first one to fire wins.
       video.removeEventListener('playing',    onFirstFrame)
       video.removeEventListener('canplay',    onFirstFrame)
       video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
       video.removeEventListener('loadeddata', onLoadedData)
 
+      // requestVideoFrameCallback = most reliable painted-frame signal.
+      // readyState >= 2 fallback = frame is decoded (good enough on most browsers).
+      // timeupdate fallback = last resort for old Safari / WebViews.
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
         ;(video as any).requestVideoFrameCallback(() => markReady())
       } else if (video.readyState >= 2) {
@@ -247,18 +264,20 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       }
     }
 
-    // Browsers that skip 'playing'/'canplay' and advance currentTime directly
+    // Catch browsers that skip 'playing'/'canplay' and advance currentTime first.
     const onFirstFrameTimeUpdate = () => {
       if (destroyed || video.currentTime <= 0) return
       onFirstFrame()
     }
 
-    // 'loadeddata' = first frame decoded and in buffer.
-    // Cancel stall timer immediately; fire onFirstFrame if we have data.
+    // 'loadeddata' = first frame is in the decode buffer.
+    // ONLY use it to cancel the stall timer — never to call onFirstFrame.
+    // Calling onFirstFrame here was the primary bug in v6: the video isn't
+    // necessarily playing yet, so removing the poster revealed a frozen frame.
     const onLoadedData = () => {
       if (destroyed) return
       clearStallTimer()
-      if (video.readyState >= 2) onFirstFrame()
+      // Do NOT call onFirstFrame here. Wait for 'playing' or 'canplay'.
     }
 
     markVideoReadyRef.current = onFirstFrame
@@ -269,8 +288,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       if (!p) return
       p.catch(() => {
         if (destroyed) return
-        // Re-try when buffered enough — faster than waiting for a gesture
-        // on many Android Chrome builds
+        // Re-try once the browser has buffered enough — faster than waiting
+        // for a user gesture on many Android Chrome builds.
         const onCPT = () => {
           if (destroyed) return
           video.removeEventListener('canplaythrough', onCPT)
@@ -314,7 +333,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       video.addEventListener('playing',    onFirstFrame,            { once: true })
       video.addEventListener('canplay',    onFirstFrame,            { once: true })
       video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
-      video.addEventListener('loadeddata', onLoadedData,            { once: true })
+      video.addEventListener('loadeddata', onLoadedData)
       armStallTimer()
       attemptPlay()
     }
@@ -346,39 +365,35 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     const onPlaying = () => { if (!destroyed) clearWaitingTimer() }
 
-    // ── Fast-path: video already buffered (BF-cache / preload hit) ────────────
-    if (video.readyState >= 3 /* HAVE_FUTURE_DATA */) {
-      markReady()
-      attemptPlay()
-      return () => {
-        destroyed = true
-        destroyedRef.current = true
-        markVideoReadyRef.current = null
-        video.pause()
-        video.removeAttribute('src')
-        video.load()
-      }
-    }
-
-    // ── Normal path: attach listeners, then trigger load/play ─────────────────
+    // ── Attach ALL listeners first, then trigger load/play ────────────────────
+    // This order guarantees no events are missed in any browser.
     video.addEventListener('playing',    onFirstFrame,            { once: true })
     video.addEventListener('canplay',    onFirstFrame,            { once: true })
     video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
-    video.addEventListener('loadeddata', onLoadedData,            { once: true })
+    video.addEventListener('loadeddata', onLoadedData)
     video.addEventListener('playing',    onPlaying)
     video.addEventListener('error',      onError)
     video.addEventListener('stalled',    onStalled)
     video.addEventListener('waiting',    onWaiting)
 
-    if (
-      video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
-      video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
-    ) {
-      video.load()
+    // If the video already has enough data (BF-cache, preload hit) start
+    // playing immediately. Listeners are already attached so recovery still
+    // works if play() is blocked.
+    if (video.readyState >= 3 /* HAVE_FUTURE_DATA */) {
+      clearStallTimer()   // no stall possible if data is already buffered
+      attemptPlay()
+    } else {
+      // Only call load() if the browser hasn't started fetching yet.
+      // (The preload link may have already started a fetch; load() would reset it.)
+      if (
+        video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
+        video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
+      ) {
+        video.load()
+      }
+      armStallTimer()
+      attemptPlay()
     }
-
-    armStallTimer()
-    attemptPlay()
 
     return () => {
       destroyed = true
