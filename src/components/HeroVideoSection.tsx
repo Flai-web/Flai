@@ -1,5 +1,5 @@
 /**
- * HeroVideoSection — v11
+ * HeroVideoSection — v12
  *
  * Key changes from v9:
  *  1. preload is always at least "metadata" (was "none" on slow — prevented load)
@@ -63,6 +63,12 @@ function getAutoplayState(): AutoplayState {
 }
 
 // ─── Control-hide CSS ─────────────────────────────────────────────────────────
+// Safari renders its own native overlay play button on paused <video> elements
+// regardless of controls={false}. We can't reliably suppress it with CSS alone.
+// The real fix: keep the <video> element visually hidden (opacity:0, behind the
+// poster) while paused — the poster covers it. Once 'playing' fires we fade the
+// poster out and the video in. Safari's native button is never visible because
+// the element underneath is always covered by our poster layer until it's live.
 
 let _styleInjected = false
 function injectControlHideStyle() {
@@ -349,23 +355,62 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
               'x-webkit-airplay':     'deny',
               'data-hero-video':      'true',
             } as any)}
-            style={{ ...FILL_STYLE }}
+            style={{
+              ...FILL_STYLE,
+              // Keep video invisible until actually playing.
+              // This ensures Safari's native overlay play button is never
+              // visible — the poster image sits on top until 'playing' fires.
+              opacity: videoReady ? 1 : 0,
+              transition: 'opacity 0.4s ease',
+            }}
           />
         </div>
       )}
 
       {showPosterLayer && (
-        <img
-          key={`poster-${publicId}-${posterStamp}`}
-          src={posterUrl}
-          srcSet={posterSrcSet}
-          sizes="100vw"
-          alt=""
-          aria-hidden="true"
-          {...({ fetchpriority: 'high' } as any)}
-          decoding="sync"
-          style={{ ...FILL_STYLE, zIndex: 1 }}
-        />
+        /* Poster doubles as the click-to-play target when autoplay is blocked.
+           It covers the video element entirely, so Safari's native play button
+           is never shown. A subtle tap/click anywhere on the poster triggers
+           play() synchronously inside a real user-gesture handler. */
+        <div
+          onClick={showPlayButton ? handleManualPlay : undefined}
+          style={{
+            ...FILL_STYLE,
+            zIndex:  1,
+            cursor:  showPlayButton ? 'pointer' : 'default',
+          }}
+        >
+          <img
+            key={`poster-${publicId}-${posterStamp}`}
+            src={posterUrl}
+            srcSet={posterSrcSet}
+            sizes="100vw"
+            alt=""
+            aria-hidden="true"
+            {...({ fetchpriority: 'high' } as any)}
+            decoding="sync"
+            style={{ ...FILL_STYLE }}
+          />
+          {/* Minimal play hint — shown only when autoplay is truly blocked */}
+          {showPlayButton && (
+            <div
+              aria-label="Play video"
+              style={{
+                position:       'absolute',
+                inset:          0,
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'center',
+                background:     'rgba(0,0,0,0.25)',
+              }}
+            >
+              <svg width="72" height="72" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+                <circle cx="36" cy="36" r="36" fill="rgba(255,255,255,0.15)" />
+                <polygon points="29,22 54,36 29,50" fill="white" />
+              </svg>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Gradient overlay */}
@@ -380,31 +425,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         }}
       />
 
-      {/* Manual play button — shown only when browser has blocked autoplay */}
-      {showPlayButton && !skipVideo && (
-        <button
-          onClick={handleManualPlay}
-          aria-label="Play video"
-          style={{
-            position:        'absolute',
-            inset:           0,
-            zIndex:          4,
-            display:         'flex',
-            alignItems:      'center',
-            justifyContent:  'center',
-            background:      'rgba(0,0,0,0.35)',
-            border:          'none',
-            cursor:          'pointer',
-            color:           '#fff',
-          }}
-        >
-          {/* Simple SVG play triangle — swap for your own icon */}
-          <svg width="72" height="72" viewBox="0 0 72 72" fill="none" aria-hidden="true">
-            <circle cx="36" cy="36" r="36" fill="rgba(255,255,255,0.15)" />
-            <polygon points="29,22 54,36 29,50" fill="white" />
-          </svg>
-        </button>
-      )}
+      {/* Play hint is now embedded in the poster layer above — no separate overlay needed */}
 
       <div className="relative w-full h-full" style={{ zIndex: 3 }}>
         {children}
