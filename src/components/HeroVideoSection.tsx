@@ -1,5 +1,5 @@
 /**
- * HeroVideoSection — v10
+ * HeroVideoSection — v11
  *
  * Key changes from v9:
  *  1. preload is always at least "metadata" (was "none" on slow — prevented load)
@@ -7,11 +7,12 @@
  *     has the best chance of autoplaying without waiting for IntersectionObserver
  *  3. Added "loadeddata" fallback: if "playing" never fires but data is ready,
  *     attempt play() again — covers Firefox and older Safari edge cases
- *  4. Gesture listeners (touchstart + click) are both removed after first fire
- *     to prevent double-invocation
- *  5. IntersectionObserver threshold lowered to 0 (was 0.01) so even 1px
- *     visibility triggers play — helps on mobile where hero may be partially
- *     off-screen during initial render
+ *  4. play() rejection no longer immediately shows the play button — an 800ms
+ *     grace timer is used instead. If 'playing' fires within that window the
+ *     timer is cancelled and the button never appears, eliminating the flash
+ *     seen on browsers that reject the promise optimistically but still play.
+ *  5. Gesture listeners (touchstart + click) both removed after first fire
+ *  6. IntersectionObserver threshold lowered to 0 (was 0.01)
  */
 
 import React, {
@@ -202,27 +203,38 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       }
     }
 
+    let revealTimer: number | undefined
+
     const attemptPlay = () => {
       video.muted = true
       const p = video.play()
       if (!p) return
-      p.catch(() => {
+      p.then(() => {
+        // Play succeeded — ensure button is never shown
+        window.clearTimeout(revealTimer)
+        setShowPlayButton(false)
+      }).catch(() => {
         if (destroyed) return
-        // Genuinely blocked — show manual play button
-        setShowPlayButton(true)
-        // Still listen for a gesture in case user interacts with page.
-        // Both listeners are removed together after the first one fires.
-        const gesturePlay = () => {
-          video.muted = true
-          video.play()
-            .then(() => setShowPlayButton(false))
-            .catch(() => {})
-          // Clean up both listeners so neither fires twice
-          document.removeEventListener('touchstart', gesturePlay)
-          document.removeEventListener('click',      gesturePlay)
-        }
-        document.addEventListener('touchstart', gesturePlay, { once: true })
-        document.addEventListener('click',      gesturePlay, { once: true })
+        // play() rejected. Many browsers fire this even when autoplay will
+        // succeed shortly (e.g. data not buffered yet). Wait a grace period
+        // before showing the button — if 'playing' fires in the meantime
+        // the reveal is cancelled so the button never flashes.
+        revealTimer = window.setTimeout(() => {
+          if (destroyed || !video.paused) return
+          setShowPlayButton(true)
+          const gesturePlay = () => {
+            video.muted = true
+            video.play()
+              .then(() => setShowPlayButton(false))
+              .catch(() => {})
+            document.removeEventListener('touchstart', gesturePlay)
+            document.removeEventListener('click',      gesturePlay)
+          }
+          document.addEventListener('touchstart', gesturePlay, { once: true })
+          document.addEventListener('click',      gesturePlay, { once: true })
+        }, 800)
+        // If video starts playing within grace period, cancel the reveal
+        video.addEventListener('playing', () => window.clearTimeout(revealTimer), { once: true })
       })
     }
 
@@ -269,6 +281,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     return () => {
       destroyed = true
+      window.clearTimeout(revealTimer)
       observer?.disconnect()
       video.removeEventListener('playing',    onPlaying)
       video.removeEventListener('error',      onError)
