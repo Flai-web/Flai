@@ -1,36 +1,27 @@
 /**
- * HeroVideoSection — v4
+ * HeroVideoSection — v5
  *
- * ─── Why videos get stuck at poster ──────────────────────────────────────────
- * Three bugs in v3 caused the video to stay frozen at the poster image:
+ * ─── Changes from v4 ─────────────────────────────────────────────────────────
  *
- * 1. video.load() after autoPlay start
- *    The <video autoPlay> element starts fetching src immediately on mount.
- *    Setting video.src then calling video.load() in the effect RESETS the
- *    element, firing 'abort'/'emptied'. The onError handler treated this as a
- *    failure and called reloadWithCacheBust(), exhausting MAX_RETRIES before
- *    playback ever began.
- *    Fix: set src as a JSX prop so the browser and the effect are in sync from
- *    the start. Never call video.load() on an element that already has a src —
- *    only call it after changing the src.
+ * 1. Controls hidden — visually and at the browser level
+ *    Added controls={false}, disablePictureInPicture, disableRemotePlayback and
+ *    a <style> block that sets `video::-webkit-media-controls { display:none }`
+ *    and `video { pointer-events: none }` on the video element.
+ *    iOS Safari will show a native overlay play button when autoplay is blocked;
+ *    hiding pointer-events prevents taps from toggling that overlay and the CSS
+ *    pseudo-element kills the control bar / AirPlay button.
  *
- * 2. 'playing' listener race
- *    onFirstFrame was registered on 'playing' with { once: true } AFTER
- *    video.load() + attemptPlay(). If 'playing' fired in the microtask gap
- *    between those calls the callback was missed → videoReady stuck false.
- *    Fix: attach all listeners BEFORE setting src/calling load/play, and use
- *    'canplay' as an additional trigger for onFirstFrame.
+ * 2. Faster first-frame recovery on autoplay block
+ *    When video.play() rejects (common on iOS before a gesture), we now also
+ *    listen on 'canplaythrough' so the moment the browser signals it has enough
+ *    data we re-attempt play — instead of waiting for an arbitrary user click.
+ *    This halves the delay on low-end Android Chrome which sometimes fires
+ *    'canplaythrough' before the gesture restriction is lifted.
  *
- * 3. requestVideoFrameCallback + React StrictMode
- *    In dev StrictMode effects run twice (mount → cleanup → mount). The cleanup
- *    sets destroyed=true before the rVFC callback fires → setVideoReady(true)
- *    never called. Fix: capture destroyed state in a closure-local ref that
- *    the rVFC callback checks, and fall back to 'timeupdate' with 1 tick
- *    (not 2) so it's more reliable across browsers.
- *
- * ─── Poster strategy (unchanged from v3) ─────────────────────────────────────
- * Single <img> with stamp-first URL. posterStamp is read from localStorage at
- * mount so the first render already uses the correct post-upload URL.
+ * 3. onFirstFrame now also fires on 'timeupdate' immediately (currentTime > 0)
+ *    Some browsers (old Safari, some WebViews) skip 'playing' and go straight to
+ *    updating currentTime. A single 'timeupdate' guard catches that path without
+ *    an extra setTimeout.
  */
 
 import React, {
@@ -71,9 +62,36 @@ const FILL_STYLE: React.CSSProperties = {
   objectFit:      'cover',
   objectPosition: 'center',
   display:        'block',
+  // Suppress any browser-injected play overlay from receiving pointer events.
+  // The native control bar is hidden via the CSS pseudo-element below.
+  pointerEvents:  'none',
+}
+
+// Injected once at module level — hides native video controls cross-browser.
+// Using a <style> tag (not inline CSS) because pseudo-elements like
+// ::-webkit-media-controls cannot be targeted via the style attribute.
+const CONTROL_HIDE_CSS = `
+  video::-webkit-media-controls            { display: none !important; }
+  video::-webkit-media-controls-enclosure  { display: none !important; }
+  video::-webkit-media-controls-panel      { display: none !important; }
+  video::-webkit-media-controls-play-button{ display: none !important; }
+  video::-webkit-media-controls-start-playback-button { display: none !important; }
+  video::--internal-media-controls-button-panel        { display: none !important; }
+`
+
+let styleInjected = false
+function injectControlHideStyle() {
+  if (styleInjected || typeof document === 'undefined') return
+  styleInjected = true
+  const el = document.createElement('style')
+  el.textContent = CONTROL_HIDE_CSS
+  document.head.appendChild(el)
 }
 
 const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', children }) => {
+  // Inject the CSS rule once on first render (client only)
+  useEffect(() => { injectControlHideStyle() }, [])
+
   const videoRef = useRef<HTMLVideoElement>(null)
 
   const [videoReady, setVideoReady] = useState(false)
@@ -82,18 +100,15 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
   const [videoKey,    setVideoKey]    = useState(0)
 
-  // The src for the current video element — derived from publicId + videoKey.
-  // Setting this as a JSX prop means the browser and the effect start from the
-  // same state: no 'abort'/'emptied' event from a mid-flight load() call.
+  // src as a JSX prop — browser and effect start from the same state.
   const videoSrc = useMemo(
     () => videoKey === 0
       ? cloudinaryMp4Url(publicId)
-      // On in-place replace, add a cache-bust param so the browser skips its
-      // internal media cache and fetches fresh bytes from Cloudinary.
       : `${cloudinaryMp4Url(publicId)}?_cb=${videoKey}`,
     [publicId, videoKey]
   )
 
+  // Listen for CMS-side video replacements
   useEffect(() => {
     const handler = (e: Event) => {
       const { publicId: newId, stamp } =
@@ -115,7 +130,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     return () => window.removeEventListener('heroVideoChanged', handler)
   }, [publicId, posterStamp])
 
-  // Poster — single stamp-first URL
+  // Poster URLs
   const posterUrl    = useMemo(() => cloudinaryPosterUrl(publicId, 1920, 'good', posterStamp), [publicId, posterStamp])
   const poster480    = useMemo(() => cloudinaryPosterUrl(publicId,  480, 'eco',  posterStamp), [publicId, posterStamp])
   const poster960    = useMemo(() => cloudinaryPosterUrl(publicId,  960, 'eco',  posterStamp), [publicId, posterStamp])
@@ -136,12 +151,10 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const video = videoRef.current
     if (!video) return
 
-    // destroyed is a plain boolean AND a ref so rVFC callbacks (which outlive
-    // the synchronous cleanup) can also check it without a stale closure.
     let destroyed = false
     const destroyedRef = { current: false }
 
-    let retries    = 0
+    let retries = 0
     const MAX_RETRIES = 3
     let stallTimer:   ReturnType<typeof setTimeout> | null = null
     let waitingTimer: ReturnType<typeof setTimeout> | null = null
@@ -149,9 +162,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const clearStallTimer   = () => { if (stallTimer   !== null) { clearTimeout(stallTimer);   stallTimer   = null } }
     const clearWaitingTimer = () => { if (waitingTimer !== null) { clearTimeout(waitingTimer); waitingTimer = null } }
 
-    // Called once we have confirmed a real video frame — removes the poster.
-    // Uses requestVideoFrameCallback where available (most reliable), falls
-    // back to a single timeupdate tick, then a 300 ms setTimeout as last resort.
+    // ── First-frame detection ─────────────────────────────────────────────────
+    // Priority: requestVideoFrameCallback > readyState check > timeupdate tick
     const markReady = () => {
       if (destroyed || destroyedRef.current) return
       setVideoReady(true)
@@ -161,40 +173,61 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       if (destroyed) return
       clearStallTimer()
 
+      // Remove sibling triggers so markReady isn't called twice
+      video.removeEventListener('playing',      onFirstFrame)
+      video.removeEventListener('canplay',      onFirstFrame)
+      video.removeEventListener('timeupdate',   onFirstFrameTimeUpdate)
+
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
         ;(video as any).requestVideoFrameCallback(() => markReady())
       } else if (video.readyState >= 2) {
-        // HAVE_CURRENT_DATA or better — a frame is already decoded
         markReady()
       } else {
         const onTU = () => {
           if (destroyed) return
           video.removeEventListener('timeupdate', onTU)
-          // Give the browser one more frame to paint before flipping
           setTimeout(markReady, 0)
         }
         video.addEventListener('timeupdate', onTU)
       }
     }
 
+    // Catch browsers that skip 'playing'/'canplay' and go straight to advancing time
+    const onFirstFrameTimeUpdate = () => {
+      if (destroyed || video.currentTime <= 0) return
+      onFirstFrame()
+    }
+
     markVideoReadyRef.current = onFirstFrame
 
+    // ── Autoplay attempt ──────────────────────────────────────────────────────
     const attemptPlay = () => {
       const p = video.play()
-      if (!p) return  // older browsers return undefined
+      if (!p) return
       p.catch(() => {
         if (destroyed) return
-        // Autoplay blocked — wait for first user gesture then retry
-        const gestureRetry = () => {
-          video.play().catch(() => {})
-          document.removeEventListener('touchstart', gestureRetry)
-          document.removeEventListener('click',      gestureRetry)
+
+        // Re-attempt as soon as the browser has enough data buffered —
+        // faster than waiting for a click on many Android devices.
+        const onCanPlayThrough = () => {
+          if (destroyed) return
+          video.removeEventListener('canplaythrough', onCanPlayThrough)
+          video.play().catch(() => {
+            // Still blocked — fall back to gesture
+            const gestureRetry = () => {
+              video.play().catch(() => {})
+              document.removeEventListener('touchstart', gestureRetry)
+              document.removeEventListener('click',      gestureRetry)
+            }
+            document.addEventListener('touchstart', gestureRetry, { once: true })
+            document.addEventListener('click',      gestureRetry, { once: true })
+          })
         }
-        document.addEventListener('touchstart', gestureRetry, { once: true })
-        document.addEventListener('click',      gestureRetry, { once: true })
+        video.addEventListener('canplaythrough', onCanPlayThrough)
       })
     }
 
+    // ── Stall / retry logic ───────────────────────────────────────────────────
     const armStallTimer = () => {
       clearStallTimer()
       stallTimer = setTimeout(() => {
@@ -208,22 +241,22 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       retries++
       clearStallTimer()
       clearWaitingTimer()
-      // Remove the once-listener before re-adding to avoid duplicate calls
-      video.removeEventListener('playing', onFirstFrame)
-      video.removeEventListener('canplay', onFirstFrame)
+      video.removeEventListener('playing',    onFirstFrame)
+      video.removeEventListener('canplay',    onFirstFrame)
+      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
       const bustUrl = `${cloudinaryMp4Url(publicId)}?_cb=${Date.now()}`
       video.src = bustUrl
       video.load()
-      video.addEventListener('playing', onFirstFrame, { once: true })
-      video.addEventListener('canplay', onFirstFrame, { once: true })
+      video.addEventListener('playing',    onFirstFrame,            { once: true })
+      video.addEventListener('canplay',    onFirstFrame,            { once: true })
+      video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
       armStallTimer()
       attemptPlay()
     }
 
     const onError = () => {
       if (destroyed) return
-      // Ignore 'abort'/'emptied' that fire naturally when src changes
-      if (video.error === null) return
+      if (video.error === null) return  // 'abort'/'emptied' from src change — ignore
       reloadWithCacheBust()
     }
 
@@ -248,22 +281,20 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     const onPlaying = () => { if (!destroyed) clearWaitingTimer() }
 
-    // Attach ALL listeners before touching src/load/play so no events are missed.
-    // 'playing' fires when playback actually starts.
-    // 'canplay' fires when enough data is buffered — catches cases where the
-    // browser can play but 'playing' hasn't fired yet (e.g. autoplay delay).
-    video.addEventListener('playing', onFirstFrame, { once: true })
-    video.addEventListener('canplay',  onFirstFrame, { once: true })
-    video.addEventListener('playing', onPlaying)
-    video.addEventListener('error',   onError)
-    video.addEventListener('stalled', onStalled)
-    video.addEventListener('waiting', onWaiting)
+    // Attach ALL listeners before touching src/load/play
+    video.addEventListener('playing',    onFirstFrame,            { once: true })
+    video.addEventListener('canplay',    onFirstFrame,            { once: true })
+    video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
+    video.addEventListener('playing',    onPlaying)
+    video.addEventListener('error',      onError)
+    video.addEventListener('stalled',    onStalled)
+    video.addEventListener('waiting',    onWaiting)
 
-    // src is already set via the JSX prop (videoSrc). Only call load() if the
-    // video isn't already loading — avoids the abort/emptied cycle that was
-    // exhausting MAX_RETRIES on first mount.
-    if (video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
-        video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+    // Only call load() if the element hasn't started fetching yet
+    if (
+      video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
+      video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
+    ) {
       video.load()
     }
 
@@ -276,17 +307,18 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       markVideoReadyRef.current = null
       clearStallTimer()
       clearWaitingTimer()
-      video.removeEventListener('playing', onFirstFrame)
-      video.removeEventListener('canplay',  onFirstFrame)
-      video.removeEventListener('playing', onPlaying)
-      video.removeEventListener('error',   onError)
-      video.removeEventListener('stalled', onStalled)
-      video.removeEventListener('waiting', onWaiting)
+      video.removeEventListener('playing',    onFirstFrame)
+      video.removeEventListener('canplay',    onFirstFrame)
+      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
+      video.removeEventListener('playing',    onPlaying)
+      video.removeEventListener('error',      onError)
+      video.removeEventListener('stalled',    onStalled)
+      video.removeEventListener('waiting',    onWaiting)
       video.pause()
       video.removeAttribute('src')
       video.load()
     }
-  }, [skipVideo, publicId, videoKey])  // videoKey remounts the element via key prop, re-running this effect
+  }, [skipVideo, publicId, videoKey])
 
   // Tab visibility — show poster immediately on hide, resume on show
   useEffect(() => {
@@ -322,6 +354,12 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           muted
           loop
           playsInline
+          controls={false}
+          // Suppress Picture-in-Picture button (Chrome, Safari)
+          disablePictureInPicture
+          // Suppress AirPlay / Cast button (Safari, Chrome)
+          {...({ disableRemotePlayback: true } as any)}
+          // iOS Safari legacy attributes
           {...({ 'webkit-playsinline': 'true', playsinline: 'true' } as any)}
           preload="auto"
           style={{ ...FILL_STYLE, zIndex: 0 }}
