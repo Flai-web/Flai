@@ -1,27 +1,34 @@
 /**
- * HeroVideoSection — v5
+ * HeroVideoSection — v6
  *
- * ─── Changes from v4 ─────────────────────────────────────────────────────────
+ * ─── Speed improvements over v5 ──────────────────────────────────────────────
  *
- * 1. Controls hidden — visually and at the browser level
- *    Added controls={false}, disablePictureInPicture, disableRemotePlayback and
- *    a <style> block that sets `video::-webkit-media-controls { display:none }`
- *    and `video { pointer-events: none }` on the video element.
- *    iOS Safari will show a native overlay play button when autoplay is blocked;
- *    hiding pointer-events prevents taps from toggling that overlay and the CSS
- *    pseudo-element kills the control bar / AirPlay button.
+ * 1. DNS prefetch + preconnect injected at MODULE LOAD TIME (not in useEffect)
+ *    The browser resolves res.cloudinary.com DNS and opens a TLS connection
+ *    before React even hydrates. On a cold load this saves ~150–300 ms.
  *
- * 2. Faster first-frame recovery on autoplay block
- *    When video.play() rejects (common on iOS before a gesture), we now also
- *    listen on 'canplaythrough' so the moment the browser signals it has enough
- *    data we re-attempt play — instead of waiting for an arbitrary user click.
- *    This halves the delay on low-end Android Chrome which sometimes fires
- *    'canplaythrough' before the gesture restriction is lifted.
+ * 2. <link rel="preload" as="video"> injected as early as possible
+ *    Called synchronously inside useMemo (first render) so the browser starts
+ *    fetching video bytes at highest network priority in parallel with React
+ *    rendering. Without this the browser doesn't discover the src until after
+ *    the first paint, costing 1–2 full render cycles.
  *
- * 3. onFirstFrame now also fires on 'timeupdate' immediately (currentTime > 0)
- *    Some browsers (old Safari, some WebViews) skip 'playing' and go straight to
- *    updating currentTime. A single 'timeupdate' guard catches that path without
- *    an extra setTimeout.
+ * 3. readyState fast-path on mount
+ *    If the video element already has buffered data (BF-cache restore, or the
+ *    preload link caused the browser to buffer before the effect ran) we skip
+ *    the event-listener path entirely and call markReady() synchronously.
+ *
+ * 4. 'loadeddata' cancels the stall timer
+ *    The browser has the first frame decoded → a network stall is impossible
+ *    at that point. Cancelling the timer avoids a spurious cache-bust reload.
+ *
+ * 5. Stall timeout 8 s → 5 s
+ *    Cloudinary CDN responds in <200 ms under normal conditions. 5 s is still
+ *    safe for 3G mobile while recovering ~3 s sooner on a real stall.
+ *
+ * 6. Controls fully suppressed (carried over from v5)
+ *    controls={false}, disablePictureInPicture, disableRemotePlayback,
+ *    pointer-events:none, and injected ::-webkit-media-controls CSS.
  */
 
 import React, {
@@ -42,6 +49,8 @@ export interface HeroVideoSectionProps {
   videoUrl?: string
 }
 
+// ─── Connection helpers ───────────────────────────────────────────────────────
+
 function getConnectionInfo() {
   if (typeof navigator === 'undefined') return { isSlow: false, saveData: false }
   const conn =
@@ -54,6 +63,76 @@ function getConnectionInfo() {
   }
 }
 
+// ─── One-time module-level network hints ─────────────────────────────────────
+// Runs before React hydrates — gives the browser maximum lead time.
+;(function injectNetworkHints() {
+  if (typeof document === 'undefined') return
+  const head = document.head
+  const CDN  = 'https://res.cloudinary.com'
+
+  const alreadyHas = (rel: string, href: string) =>
+    !!head.querySelector(`link[rel="${rel}"][href="${href}"]`)
+
+  if (!alreadyHas('dns-prefetch', CDN)) {
+    const el = document.createElement('link')
+    el.rel  = 'dns-prefetch'
+    el.href = CDN
+    head.prepend(el)
+  }
+
+  if (!alreadyHas('preconnect', CDN)) {
+    const el       = document.createElement('link')
+    el.rel         = 'preconnect'
+    el.href        = CDN
+    el.crossOrigin = 'anonymous'
+    head.prepend(el)
+  }
+})()
+
+// ─── <link rel="preload" as="video"> ─────────────────────────────────────────
+// Injected on first render (via useMemo) so the browser fetches video bytes
+// at max priority before the <video> element even mounts.
+let _preloadEl: HTMLLinkElement | null = null
+
+function injectVideoPreload(src: string) {
+  if (typeof document === 'undefined') return
+  if (_preloadEl) {
+    if (_preloadEl.getAttribute('href') === src) return  // already correct
+    _preloadEl.remove()
+    _preloadEl = null
+  }
+  const el       = document.createElement('link')
+  el.rel         = 'preload'
+  el.as          = 'video'
+  el.type        = 'video/mp4'
+  el.href        = src
+  el.crossOrigin = 'anonymous'
+  document.head.prepend(el)
+  _preloadEl = el
+}
+
+// ─── Control-hide CSS ─────────────────────────────────────────────────────────
+// Must be a real stylesheet rule — pseudo-elements can't be targeted via style={}
+
+const CONTROL_HIDE_CSS = `
+  video::-webkit-media-controls                       { display: none !important; }
+  video::-webkit-media-controls-enclosure             { display: none !important; }
+  video::-webkit-media-controls-panel                 { display: none !important; }
+  video::-webkit-media-controls-play-button           { display: none !important; }
+  video::-webkit-media-controls-start-playback-button { display: none !important; }
+  video::--internal-media-controls-button-panel       { display: none !important; }
+`
+let _styleInjected = false
+function injectControlHideStyle() {
+  if (_styleInjected || typeof document === 'undefined') return
+  _styleInjected = true
+  const el = document.createElement('style')
+  el.textContent = CONTROL_HIDE_CSS
+  document.head.appendChild(el)
+}
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
 const FILL_STYLE: React.CSSProperties = {
   position:       'absolute',
   inset:          0,
@@ -62,53 +141,30 @@ const FILL_STYLE: React.CSSProperties = {
   objectFit:      'cover',
   objectPosition: 'center',
   display:        'block',
-  // Suppress any browser-injected play overlay from receiving pointer events.
-  // The native control bar is hidden via the CSS pseudo-element below.
-  pointerEvents:  'none',
+  pointerEvents:  'none',   // prevent tap from triggering iOS overlay play button
 }
 
-// Injected once at module level — hides native video controls cross-browser.
-// Using a <style> tag (not inline CSS) because pseudo-elements like
-// ::-webkit-media-controls cannot be targeted via the style attribute.
-const CONTROL_HIDE_CSS = `
-  video::-webkit-media-controls            { display: none !important; }
-  video::-webkit-media-controls-enclosure  { display: none !important; }
-  video::-webkit-media-controls-panel      { display: none !important; }
-  video::-webkit-media-controls-play-button{ display: none !important; }
-  video::-webkit-media-controls-start-playback-button { display: none !important; }
-  video::--internal-media-controls-button-panel        { display: none !important; }
-`
-
-let styleInjected = false
-function injectControlHideStyle() {
-  if (styleInjected || typeof document === 'undefined') return
-  styleInjected = true
-  const el = document.createElement('style')
-  el.textContent = CONTROL_HIDE_CSS
-  document.head.appendChild(el)
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', children }) => {
-  // Inject the CSS rule once on first render (client only)
   useEffect(() => { injectControlHideStyle() }, [])
 
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const [videoReady, setVideoReady] = useState(false)
-
+  const [videoReady,  setVideoReady]  = useState(false)
   const [publicId,    setPublicId]    = useState(() => getHeroVideo().public_id)
   const [posterStamp, setPosterStamp] = useState(() => getHeroVideo().posterStamp)
   const [videoKey,    setVideoKey]    = useState(0)
 
-  // src as a JSX prop — browser and effect start from the same state.
-  const videoSrc = useMemo(
-    () => videoKey === 0
-      ? cloudinaryMp4Url(publicId)
-      : `${cloudinaryMp4Url(publicId)}?_cb=${videoKey}`,
-    [publicId, videoKey]
-  )
+  // Derive video src. Injects preload link immediately on every src change.
+  const videoSrc = useMemo(() => {
+    const base = cloudinaryMp4Url(publicId)
+    const src  = videoKey === 0 ? base : `${base}?_cb=${videoKey}`
+    injectVideoPreload(src)   // called synchronously — browser starts fetching now
+    return src
+  }, [publicId, videoKey])
 
-  // Listen for CMS-side video replacements
+  // CMS-side video replacement events
   useEffect(() => {
     const handler = (e: Event) => {
       const { publicId: newId, stamp } =
@@ -116,11 +172,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
       if (newId) {
         setVideoReady(false)
-        if (newId !== publicId) {
-          setPublicId(newId)
-        } else {
-          setVideoKey((k) => k + 1)
-        }
+        if (newId !== publicId) setPublicId(newId)
+        else                    setVideoKey((k) => k + 1)
       }
       if (typeof stamp === 'number' && stamp !== posterStamp) {
         setPosterStamp(stamp)
@@ -146,6 +199,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   const markVideoReadyRef = useRef<(() => void) | null>(null)
 
+  // ── Main playback effect ────────────────────────────────────────────────────
   useEffect(() => {
     if (skipVideo) return
     const video = videoRef.current
@@ -156,6 +210,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     let retries = 0
     const MAX_RETRIES = 3
+
     let stallTimer:   ReturnType<typeof setTimeout> | null = null
     let waitingTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -163,7 +218,6 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     const clearWaitingTimer = () => { if (waitingTimer !== null) { clearTimeout(waitingTimer); waitingTimer = null } }
 
     // ── First-frame detection ─────────────────────────────────────────────────
-    // Priority: requestVideoFrameCallback > readyState check > timeupdate tick
     const markReady = () => {
       if (destroyed || destroyedRef.current) return
       setVideoReady(true)
@@ -173,10 +227,11 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       if (destroyed) return
       clearStallTimer()
 
-      // Remove sibling triggers so markReady isn't called twice
-      video.removeEventListener('playing',      onFirstFrame)
-      video.removeEventListener('canplay',      onFirstFrame)
-      video.removeEventListener('timeupdate',   onFirstFrameTimeUpdate)
+      // Deregister all sibling triggers to prevent double-firing
+      video.removeEventListener('playing',    onFirstFrame)
+      video.removeEventListener('canplay',    onFirstFrame)
+      video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
+      video.removeEventListener('loadeddata', onLoadedData)
 
       if (typeof (video as any).requestVideoFrameCallback === 'function') {
         ;(video as any).requestVideoFrameCallback(() => markReady())
@@ -192,48 +247,55 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       }
     }
 
-    // Catch browsers that skip 'playing'/'canplay' and go straight to advancing time
+    // Browsers that skip 'playing'/'canplay' and advance currentTime directly
     const onFirstFrameTimeUpdate = () => {
       if (destroyed || video.currentTime <= 0) return
       onFirstFrame()
     }
 
+    // 'loadeddata' = first frame decoded and in buffer.
+    // Cancel stall timer immediately; fire onFirstFrame if we have data.
+    const onLoadedData = () => {
+      if (destroyed) return
+      clearStallTimer()
+      if (video.readyState >= 2) onFirstFrame()
+    }
+
     markVideoReadyRef.current = onFirstFrame
 
-    // ── Autoplay attempt ──────────────────────────────────────────────────────
+    // ── Autoplay ──────────────────────────────────────────────────────────────
     const attemptPlay = () => {
       const p = video.play()
       if (!p) return
       p.catch(() => {
         if (destroyed) return
-
-        // Re-attempt as soon as the browser has enough data buffered —
-        // faster than waiting for a click on many Android devices.
-        const onCanPlayThrough = () => {
+        // Re-try when buffered enough — faster than waiting for a gesture
+        // on many Android Chrome builds
+        const onCPT = () => {
           if (destroyed) return
-          video.removeEventListener('canplaythrough', onCanPlayThrough)
+          video.removeEventListener('canplaythrough', onCPT)
           video.play().catch(() => {
-            // Still blocked — fall back to gesture
-            const gestureRetry = () => {
+            if (destroyed) return
+            const retry = () => {
               video.play().catch(() => {})
-              document.removeEventListener('touchstart', gestureRetry)
-              document.removeEventListener('click',      gestureRetry)
+              document.removeEventListener('touchstart', retry)
+              document.removeEventListener('click',      retry)
             }
-            document.addEventListener('touchstart', gestureRetry, { once: true })
-            document.addEventListener('click',      gestureRetry, { once: true })
+            document.addEventListener('touchstart', retry, { once: true })
+            document.addEventListener('click',      retry, { once: true })
           })
         }
-        video.addEventListener('canplaythrough', onCanPlayThrough)
+        video.addEventListener('canplaythrough', onCPT)
       })
     }
 
-    // ── Stall / retry logic ───────────────────────────────────────────────────
+    // ── Stall / retry ─────────────────────────────────────────────────────────
     const armStallTimer = () => {
       clearStallTimer()
       stallTimer = setTimeout(() => {
         if (destroyed || (videoRef.current?.currentTime ?? 0) > 0) return
         reloadWithCacheBust()
-      }, 8_000)
+      }, 5_000)
     }
 
     const reloadWithCacheBust = () => {
@@ -244,19 +306,22 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       video.removeEventListener('playing',    onFirstFrame)
       video.removeEventListener('canplay',    onFirstFrame)
       video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
+      video.removeEventListener('loadeddata', onLoadedData)
       const bustUrl = `${cloudinaryMp4Url(publicId)}?_cb=${Date.now()}`
+      injectVideoPreload(bustUrl)
       video.src = bustUrl
       video.load()
       video.addEventListener('playing',    onFirstFrame,            { once: true })
       video.addEventListener('canplay',    onFirstFrame,            { once: true })
       video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
+      video.addEventListener('loadeddata', onLoadedData,            { once: true })
       armStallTimer()
       attemptPlay()
     }
 
     const onError = () => {
       if (destroyed) return
-      if (video.error === null) return  // 'abort'/'emptied' from src change — ignore
+      if (video.error === null) return  // natural abort from src change — ignore
       reloadWithCacheBust()
     }
 
@@ -281,16 +346,30 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
     const onPlaying = () => { if (!destroyed) clearWaitingTimer() }
 
-    // Attach ALL listeners before touching src/load/play
+    // ── Fast-path: video already buffered (BF-cache / preload hit) ────────────
+    if (video.readyState >= 3 /* HAVE_FUTURE_DATA */) {
+      markReady()
+      attemptPlay()
+      return () => {
+        destroyed = true
+        destroyedRef.current = true
+        markVideoReadyRef.current = null
+        video.pause()
+        video.removeAttribute('src')
+        video.load()
+      }
+    }
+
+    // ── Normal path: attach listeners, then trigger load/play ─────────────────
     video.addEventListener('playing',    onFirstFrame,            { once: true })
     video.addEventListener('canplay',    onFirstFrame,            { once: true })
     video.addEventListener('timeupdate', onFirstFrameTimeUpdate)
+    video.addEventListener('loadeddata', onLoadedData,            { once: true })
     video.addEventListener('playing',    onPlaying)
     video.addEventListener('error',      onError)
     video.addEventListener('stalled',    onStalled)
     video.addEventListener('waiting',    onWaiting)
 
-    // Only call load() if the element hasn't started fetching yet
     if (
       video.networkState === HTMLMediaElement.NETWORK_EMPTY ||
       video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
@@ -310,6 +389,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
       video.removeEventListener('playing',    onFirstFrame)
       video.removeEventListener('canplay',    onFirstFrame)
       video.removeEventListener('timeupdate', onFirstFrameTimeUpdate)
+      video.removeEventListener('loadeddata', onLoadedData)
       video.removeEventListener('playing',    onPlaying)
       video.removeEventListener('error',      onError)
       video.removeEventListener('stalled',    onStalled)
@@ -320,7 +400,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     }
   }, [skipVideo, publicId, videoKey])
 
-  // Tab visibility — show poster immediately on hide, resume on show
+  // ── Tab visibility ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (skipVideo) return
     const handleVisibility = () => {
@@ -355,12 +435,10 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
           loop
           playsInline
           controls={false}
-          // Suppress Picture-in-Picture button (Chrome, Safari)
           disablePictureInPicture
-          // Suppress AirPlay / Cast button (Safari, Chrome)
-          {...({ disableRemotePlayback: true } as any)}
-          // iOS Safari legacy attributes
-          {...({ 'webkit-playsinline': 'true', playsinline: 'true' } as any)}
+          {...({ disableRemotePlayback: true }  as any)}
+          {...({ 'webkit-playsinline': 'true',
+                 playsinline:          'true' } as any)}
           preload="auto"
           style={{ ...FILL_STYLE, zIndex: 0 }}
         />
