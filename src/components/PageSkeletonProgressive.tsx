@@ -43,11 +43,13 @@ const PageSkeleton = () => {
     </div>
   );
 
-  // Homepage Hero - uses the actual poster image so the Suspense swap is seamless.
-  // When Suspense replaces this skeleton with HeroVideoSection, both show the same
-  // poster image so the hard DOM swap is visually invisible.
-  // Matches cloudinaryPosterUrl() in heroPreload.ts exactly — browser reuses the preloaded response.
-  const POSTER_URL = `https://res.cloudinary.com/dq6jxbyrg/video/upload/c_fill,g_auto,w_1920,so_0/f_jpg/q_auto:good/herovideo.jpg`
+  // Homepage Hero — must use the SAME stamped URL as HeroVideoSection so the
+  // browser reuses the in-flight preload and the Suspense swap is invisible.
+  // Read the stamp from localStorage (written by bustHeroCache after each upload)
+  // so this skeleton never shows a stale poster on return visits.
+  const _skeletonStamp = (() => { try { return localStorage.getItem('hero_poster_v') ?? '0' } catch { return '0' } })()
+  const _posterBase    = `https://res.cloudinary.com/dq6jxbyrg/video/upload/c_fill,g_auto,w_1920,so_0/f_jpg/q_auto:good/herovideo.jpg`
+  const POSTER_URL     = _skeletonStamp !== '0' ? `${_posterBase}?v=${_skeletonStamp}` : _posterBase
   const HomeHeroSkeleton = () => (
     <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#111' }}>
       {/* Same poster as HeroVideoSection — seamless handoff on Suspense swap */}
