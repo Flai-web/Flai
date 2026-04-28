@@ -1,16 +1,17 @@
 /**
- * HeroVideoSection — v9
+ * HeroVideoSection — v10
  *
- * Key changes from v8:
- *  1. Uses Navigator.getAutoplayPolicy() to pre-check before attempting play
- *  2. Renders video WITHOUT src initially; src is set after the ref callback
- *     stamps the muted attribute — eliminates the Safari parse-time race
- *  3. Adds autoPlay attribute back (belt+suspenders), which is safe once muted
- *     attribute is guaranteed present before src assignment
- *  4. Exposes a visible play-button overlay when autoplay is disallowed
- *  5. Uses IntersectionObserver to defer play() until element is in viewport
- *  6. Switches preload to "metadata" on slow connections, "auto" on fast
- *  7. Simplifies retry logic — removes cache-bust loop (was masking real issue)
+ * Key changes from v9:
+ *  1. preload is always at least "metadata" (was "none" on slow — prevented load)
+ *  2. Ref callback calls play() eagerly right after src assignment so iOS Safari
+ *     has the best chance of autoplaying without waiting for IntersectionObserver
+ *  3. Added "loadeddata" fallback: if "playing" never fires but data is ready,
+ *     attempt play() again — covers Firefox and older Safari edge cases
+ *  4. Gesture listeners (touchstart + click) are both removed after first fire
+ *     to prevent double-invocation
+ *  5. IntersectionObserver threshold lowered to 0 (was 0.01) so even 1px
+ *     visibility triggers play — helps on mobile where hero may be partially
+ *     off-screen during initial render
  */
 
 import React, {
@@ -110,7 +111,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
 
   const { isSlow, saveData } = useMemo(getConnectionInfo, [])
   const skipVideo  = isSlow || saveData
-  const preloadVal = isSlow ? 'none' : 'auto'
+  // Always load at least metadata — 'none' prevents the browser from buffering
+  // enough to call play(), which breaks autoplay on slow connections entirely.
+  const preloadVal = isSlow ? 'metadata' : 'auto'
 
   const autoplayState = useMemo(getAutoplayState, [])
 
@@ -122,6 +125,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   // ── Ref callback ─────────────────────────────────────────────────────────────
   // Sets muted as an HTML *attribute* (not just a React prop) before src is
   // assigned, satisfying Safari's parse-time muted-autoplay requirement.
+  // Also calls play() eagerly after src assignment — iOS Safari benefits from
+  // the play() attempt being as close to src assignment as possible.
   const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
     (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
     if (!el) return
@@ -134,6 +139,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     el.volume  = 0
     // NOW assign src — browser sees muted attribute already present
     el.src     = videoSrc
+    // Eager play attempt immediately after src — best chance on iOS Safari.
+    // The main effect's IntersectionObserver will retry if this is too early.
+    el.play().catch(() => { /* will retry via IntersectionObserver */ })
   }, [videoSrc])
 
   // CMS replacement listener
@@ -202,12 +210,14 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         if (destroyed) return
         // Genuinely blocked — show manual play button
         setShowPlayButton(true)
-        // Still listen for a gesture in case user interacts with page
+        // Still listen for a gesture in case user interacts with page.
+        // Both listeners are removed together after the first one fires.
         const gesturePlay = () => {
           video.muted = true
           video.play()
             .then(() => setShowPlayButton(false))
             .catch(() => {})
+          // Clean up both listeners so neither fires twice
           document.removeEventListener('touchstart', gesturePlay)
           document.removeEventListener('click',      gesturePlay)
         }
@@ -215,6 +225,14 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
         document.addEventListener('click',      gesturePlay, { once: true })
       })
     }
+
+    // Fallback: if 'playing' never fires but data has arrived, try play() again.
+    // Covers Firefox and older Safari where autoPlay attribute alone isn't enough.
+    const onLoadedData = () => {
+      if (destroyed || !video.paused) return
+      attemptPlay()
+    }
+    video.addEventListener('loadeddata', onLoadedData, { once: true })
 
     const onError = () => {
       if (destroyed || !video.error) return
@@ -231,7 +249,8 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     }
 
     // Use IntersectionObserver so play() fires when element is actually visible.
-    // This sidesteps the "not in viewport" block on some Android WebViews.
+    // threshold:0 means even 1px visible triggers play — important on mobile
+    // where the hero may be partially clipped during initial render.
     let observer: IntersectionObserver | null = null
     if ('IntersectionObserver' in window) {
       observer = new IntersectionObserver(
@@ -241,7 +260,7 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
             attemptPlay()
           }
         },
-        { threshold: 0.01 }
+        { threshold: 0 }
       )
       observer.observe(video)
     } else {
@@ -251,8 +270,9 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
     return () => {
       destroyed = true
       observer?.disconnect()
-      video.removeEventListener('playing', onPlaying)
-      video.removeEventListener('error',   onError)
+      video.removeEventListener('playing',    onPlaying)
+      video.removeEventListener('error',      onError)
+      video.removeEventListener('loadeddata', onLoadedData)
       video.pause()
       video.removeAttribute('src')
       video.load()
