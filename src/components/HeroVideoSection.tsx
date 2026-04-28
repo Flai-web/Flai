@@ -105,21 +105,29 @@ const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({ className = '', chi
   // Keep src ref in sync so the ref callback always reads the latest value
   videoSrcRef.current = videoSrc
 
-  // ── Ref callback ─────────────────────────────────────────────────────────────
-  // Stable (no deps) — reads src from ref to avoid re-running on every render,
-  // which was causing a brief src-reassignment flicker on Chrome.
-  const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
-    (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
-    if (!el) return
-    el.setAttribute('muted',              '')
-    el.setAttribute('playsinline',        '')
-    el.setAttribute('webkit-playsinline', '')
-    el.setAttribute('x-webkit-airplay',   'deny')
-    el.muted  = true
-    el.volume = 0
-    el.src    = videoSrcRef.current
-    el.play().catch(() => {})
-  }, []) // intentionally stable — reads src from ref
+// Remove from ref callback:
+// el.src = videoSrcRef.current   ← kills <source> selection
+
+// Add to <video> JSX:
+<video key={...} ref={setVideoRef} autoPlay muted loop playsInline ...>
+  <source src={cloudinaryWebmUrl(publicId)} type="video/webm" />
+  <source src={cloudinaryMp4Url(publicId)}  type="video/mp4"  />
+</video>
+
+// Update ref callback — call load() instead of assigning src:
+const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
+  videoRef.current = el
+  if (!el) return
+  el.setAttribute('muted', '')
+  el.setAttribute('playsinline', '')
+  el.setAttribute('webkit-playsinline', '')
+  el.setAttribute('x-webkit-airplay', 'deny')
+  el.muted  = true
+  el.volume = 0
+  // Don't assign el.src — let browser pick the best <source>
+  el.load()
+  el.play().catch(() => {})
+}, [])
 
   // CMS replacement listener
   useEffect(() => {
