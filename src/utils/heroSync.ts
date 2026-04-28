@@ -43,7 +43,9 @@ import { bustHeroCache, getPosterStamp } from './heroPreload'
 
 const SUPABASE_URL    = 'https://pbqeljimuerxatrtmgsn.supabase.co'
 // Anon key is safe to expose (RLS enforced server-side).
-const SUPABASE_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBicWVsamltdWVyeGF0cnRtZ3NuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjA1MzU3NjAwMH0.placeholder'
+// ⚠️  Replace this with your real anon key from:
+//     Supabase Dashboard → Project Settings → API → anon public
+const SUPABASE_ANON   = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 const CHANNEL_NAME    = 'hero-video-sync'
 const EVENT_NAME      = 'cache-bust'
@@ -158,7 +160,22 @@ export async function broadcastHeroUpdate(publicId: string): Promise<void> {
   if (typeof window === 'undefined') return
 
   // Ensure the channel is open before broadcasting.
+  // subscribe() initiates an async WebSocket handshake — we must wait for the
+  // channel to reach 'joined' state before calling .send(), otherwise the
+  // message is silently dropped.
   if (!channel) subscribe()
+
+  // Poll up to 4 s for the channel to become ready
+  await new Promise<void>((resolve) => {
+    if (channel?.state === 'joined') { resolve(); return }
+    let attempts = 0
+    const poll = setInterval(() => {
+      if (channel?.state === 'joined' || ++attempts > 40) {
+        clearInterval(poll)
+        resolve()
+      }
+    }, 100)
+  })
 
   const payload: HeroBustPayload = {
     publicId,
