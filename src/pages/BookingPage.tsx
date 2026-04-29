@@ -141,9 +141,8 @@ const BookingPage: React.FC = () => {
   // - If editing is NOT included but user opts in, add 100 kr
   useEffect(() => {
     if (product) {
-      const editingCost = (!product.is_editing_included && includeEditing) ? 100 : 0;
+      const editingCost = (product.category === 'video' && !product.is_editing_included && includeEditing) ? 100 : 0;
       setTotalPrice(product.price + editingCost);
-    }
   }, [product, includeEditing]);
 
   // Auto-enable editing toggle if product includes it (for UI clarity), but no charge added
@@ -303,8 +302,8 @@ const BookingPage: React.FC = () => {
         return;
       }
 
-      // Only charge for editing if NOT included in product AND user opted in
-      const editingCost = (!product.is_editing_included && includeEditing) ? 100 : 0;
+      // Only charge for editing if video category AND NOT included in product AND user opted in
+      const editingCost = (product.category === 'video' && !product.is_editing_included && includeEditing) ? 100 : 0;
       const calculatedTotalPrice = product.price + editingCost;
 
       navigate('/payment', {
@@ -625,6 +624,7 @@ const BookingPage: React.FC = () => {
             </div>
           </div>
           
+          {product.category === 'video' && (
           <div className="bg-neutral-800 rounded-xl shadow-md p-6 mb-8 border border-neutral-700">
             <EditableContent
               contentKey="booking-extras-title"
@@ -685,6 +685,7 @@ const BookingPage: React.FC = () => {
               </div>
             )}
           </div>
+          )}
           
           <div className="bg-neutral-800 rounded-xl shadow-md p-6 mb-8 border border-neutral-700">
             <EditableContent
@@ -738,8 +739,8 @@ const BookingPage: React.FC = () => {
                 <span className="text-white">{product.price} kr</span>
               </div>
 
-              {/* Only show editing line item if NOT included in product AND user opted in */}
-              {!product.is_editing_included && includeEditing && (
+              {/* Only show editing line item if video category AND NOT included in product AND user opted in */}
+              {product.category === 'video' && !product.is_editing_included && includeEditing && (
                 <div className="flex justify-between">
                   <EditableContent
                     contentKey="booking-summary-editing-label"
@@ -751,8 +752,8 @@ const BookingPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Show editing included badge if product includes it */}
-              {product.is_editing_included && (
+              {/* Show editing included badge if video category AND product includes it */}
+              {product.category === 'video' && product.is_editing_included && (
                 <div className="flex justify-between">
                   <EditableContent
                     contentKey="booking-summary-editing-label"
