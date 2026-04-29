@@ -352,8 +352,8 @@ const ProductPage: React.FC = () => {
                 </ul>
               </div>
 
-              {/* Optional Editing */}
-              {product.is_editing_included ? (
+              {/* Optional Editing - only for video category products */}
+              {product.category === 'video' && (product.is_editing_included ? (
                 <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
                   <div className="flex items-center">
                     <svg className="w-6 h-6 text-green-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
@@ -396,7 +396,7 @@ const ProductPage: React.FC = () => {
                     fallback="+100 kr"
                   />
                 </div>
-              )}
+              ))}
 
               {/* Book Now Buttons */}
               <div className="pt-4 flex flex-row space-x-3">
