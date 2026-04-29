@@ -143,6 +143,7 @@ const BookingPage: React.FC = () => {
     if (product) {
       const editingCost = (product.category === 'video' && !product.is_editing_included && includeEditing) ? 100 : 0;
       setTotalPrice(product.price + editingCost);
+    }
   }, [product, includeEditing]);
 
   // Auto-enable editing toggle if product includes it (for UI clarity), but no charge added
