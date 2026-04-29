@@ -220,7 +220,7 @@ const SimpleRequestPage: React.FC = () => {
 
   const calculateTotalPrice = () => {
     let total = formData.productPrice;
-    if (formData.wantsEditing && selectedProduct && !selectedProduct.is_editing_included) total += 100;
+    if (formData.wantsEditing && selectedProduct && selectedProduct.category === 'video' && !selectedProduct.is_editing_included) total += 100;
     return total;
   };
 
@@ -264,7 +264,7 @@ const SimpleRequestPage: React.FC = () => {
             customerEmail: formData.customerEmail,
             customerName: formData.customerName,
             customerAddress: formData.customerAddress,
-            wantsEditing: selectedProduct?.is_editing_included ? true : formData.wantsEditing,
+            wantsEditing: (selectedProduct?.category === 'video' && selectedProduct?.is_editing_included) ? true : (selectedProduct?.category === 'video' ? formData.wantsEditing : false),
             paymentMethod: formData.paymentMethod,
           }),
         }
@@ -316,7 +316,7 @@ const SimpleRequestPage: React.FC = () => {
           customerEmail: formData.customerEmail,
           customerName: formData.customerName,
           customerAddress: formData.customerAddress,
-          wantsEditing: selectedProduct?.is_editing_included ? true : formData.wantsEditing,
+          wantsEditing: (selectedProduct?.category === 'video' && selectedProduct?.is_editing_included) ? true : (selectedProduct?.category === 'video' ? formData.wantsEditing : false),
           paymentMethod: formData.paymentMethod,
         }),
       }
@@ -353,7 +353,7 @@ const SimpleRequestPage: React.FC = () => {
             productId: formData.productId,
             productName: formData.productName,
             address: formData.customerAddress,
-            includeEditing: formData.wantsEditing,
+            includeEditing: selectedProduct?.category === 'video' ? formData.wantsEditing : false,
             guestEmail: formData.customerEmail,
             customerName: formData.customerName,
             mode: 'smart',
@@ -407,7 +407,7 @@ const SimpleRequestPage: React.FC = () => {
             customerEmail: formData.customerEmail,
             customerName: formData.customerName,
             customerAddress: formData.customerAddress,
-            wantsEditing: selectedProduct?.is_editing_included ? true : formData.wantsEditing,
+            wantsEditing: (selectedProduct?.category === 'video' && selectedProduct?.is_editing_included) ? true : (selectedProduct?.category === 'video' ? formData.wantsEditing : false),
             paymentMethod: 'credits',
           }),
         }
@@ -630,8 +630,8 @@ const SimpleRequestPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Editing Option */}
-            {selectedProduct && (
+            {/* Editing Option - only for video category products */}
+            {selectedProduct && selectedProduct.category === 'video' && (
               <div className="bg-neutral-800 rounded-xl shadow-md p-6 mb-6 border border-neutral-700">
                 <EditableContent contentKey="simple-editing-title" as="h2" className="text-xl font-semibold mb-4" fallback="Tilvalg" />
 
