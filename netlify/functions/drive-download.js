@@ -153,7 +153,7 @@ async function getAccessToken(email, privateKey) {
 
 async function getFileMeta(fileId, token) {
   const url = `https://www.googleapis.com/drive/v3/files/${fileId}` +
-              `?fields=id,name,size,mimeType`;
+              `?fields=id,name,size,mimeType&supportsAllDrives=true&includeItemsFromAllDrives=true`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const txt = await res.text();
@@ -264,7 +264,7 @@ export default async (req) => {
   //  Google Drive page, no intermediate tab.
 
   const driveDownloadUrl =
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true&includeItemsFromAllDrives=true`;
 
   let driveRes;
   try {
