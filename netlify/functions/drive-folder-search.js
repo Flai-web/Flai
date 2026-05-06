@@ -135,7 +135,9 @@ async function searchFolderFiles(token, folderId, query) {
     `?q=${encodeURIComponent(driveQuery)}` +
     `&fields=${encodeURIComponent(fields)}` +
     `&orderBy=modifiedTime+desc` +
-    `&pageSize=20`;
+    `&pageSize=20` +
+    `&supportsAllDrives=true` +
+    `&includeItemsFromAllDrives=true`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
