@@ -250,367 +250,367 @@ const Section_9009b281 = ((
   useState, useEffect, useCallback
 ) => {
   // ─── Config ───────────────────────────────────────────────────────────────────
-  const SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';
-  const SUPABASE_KEY =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';
-  const PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';
-  const STORAGE_KEY = 'flai_reviews_' + PLACE_ID;
-  const EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;
-  const RATING_KEY = 'flai_rating_' + PLACE_ID;
+    const SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';
+    const SUPABASE_KEY =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';
+    const PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';
+    const STORAGE_KEY = 'flai_reviews_' + PLACE_ID;
+    const EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;
+    const RATING_KEY = 'flai_rating_' + PLACE_ID;
 
-  // ─── Hardcoded pinned reviewer names ─────────────────────────────────────────
-  const PINNED_REVIEW_1: string | null = null;
-  const PINNED_REVIEW_2: string | null = null;
+    // ─── Hardcoded pinned reviewer names ─────────────────────────────────────────
+    const PINNED_REVIEW_1: string | null = null;
+    const PINNED_REVIEW_2: string | null = null;
 
-  // ─── Cache helpers ────────────────────────────────────────────────────────────
-  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    // ─── Cache helpers ────────────────────────────────────────────────────────────
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-  function isCacheStale() {
-    const exp = localStorage.getItem(EXPIRES_AT_KEY);
-    if (!exp) return true;
-    return Date.now() >= Number(exp);
-  }
-
-  function readCache() {
-    const raw    = localStorage.getItem(STORAGE_KEY);
-    const rating = localStorage.getItem(RATING_KEY);
-    if (!raw || !rating) return null;
-    try { return { reviews: JSON.parse(raw) as any[], rating }; }
-    catch { return null; }
-  }
-
-  function saveToCache(reviews: any[], rating: string | number) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
-    localStorage.setItem(RATING_KEY, String(rating));
-    localStorage.setItem(EXPIRES_AT_KEY, String(Date.now() + CACHE_TTL_MS));
-  }
-
-  async function fetchFromApi() {
-    const res = await fetch(
-      SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,
-      { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }
-    );
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    if (!data.reviews || !data.reviews.length) throw new Error('Empty');
-    saveToCache(data.reviews, data.rating || '0.0');
-    return { reviews: data.reviews as any[], rating: String(data.rating || '0.0') };
-  }
-
-  async function getReviews(
-    onUpdate: (d: { reviews: any[]; rating: string }) => void
-  ): Promise<{ reviews: any[]; rating: string } | null> {
-    const cached = readCache();
-    if (cached && !isCacheStale()) return cached;
-    if (cached) {
-      fetchFromApi()
-        .then((fresh) => {
-          if (JSON.stringify(cached.reviews) !== JSON.stringify(fresh.reviews)) {
-            onUpdate(fresh);
-          }
-        })
-        .catch(() => {});
-      return cached;
+    function isCacheStale() {
+      const exp = localStorage.getItem(EXPIRES_AT_KEY);
+      if (!exp) return true;
+      return Date.now() >= Number(exp);
     }
-    return fetchFromApi();
-  }
 
-  function buildDisplayPair(raw: any[]): [any | null, any | null] {
-    const fiveStar = raw.filter((r: any) => Number(r.rating) === 5);
-    const sorted = [...fiveStar].sort((a: any, b: any) => {
-      const aThumb = a.user?.thumbnail ? 1 : 0;
-      const bThumb = b.user?.thumbnail ? 1 : 0;
-      if (aThumb !== bThumb) return bThumb - aThumb;
-      const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;
-      const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;
-      return bText - aText;
-    });
+    function readCache() {
+      const raw    = localStorage.getItem(STORAGE_KEY);
+      const rating = localStorage.getItem(RATING_KEY);
+      if (!raw || !rating) return null;
+      try { return { reviews: JSON.parse(raw) as any[], rating }; }
+      catch { return null; }
+    }
 
-    const findByName = (name: string | null) => {
-      if (!name) return null;
-      return sorted.find(
-        (r: any) =>
-          (r.user?.name || '').toLowerCase().trim() === name.toLowerCase().trim()
-      ) ?? null;
-    };
+    function saveToCache(reviews: any[], rating: string | number) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
+      localStorage.setItem(RATING_KEY, String(rating));
+      localStorage.setItem(EXPIRES_AT_KEY, String(Date.now() + CACHE_TTL_MS));
+    }
 
-    const pinned1 = findByName(PINNED_REVIEW_1);
-    const pinned2 = findByName(PINNED_REVIEW_2);
-    const pinnedSet = new Set([pinned1, pinned2].filter(Boolean));
-    const pool = sorted.filter((r) => !pinnedSet.has(r));
-    const slot1 = pinned1 ?? pool.shift() ?? null;
-    const slot2 = pinned2 ?? pool.shift() ?? null;
-    return [slot1, slot2];
-  }
+    async function fetchFromApi() {
+      const res = await fetch(
+        SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,
+        { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }
+      );
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (!data.reviews || !data.reviews.length) throw new Error('Empty');
+      saveToCache(data.reviews, data.rating || '0.0');
+      return { reviews: data.reviews as any[], rating: String(data.rating || '0.0') };
+    }
 
-  function GoogleG({ size = 14 }: { size?: number }) {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-      </svg>
-    );
-  }
+    async function getReviews(
+      onUpdate: (d: { reviews: any[]; rating: string }) => void
+    ): Promise<{ reviews: any[]; rating: string } | null> {
+      const cached = readCache();
+      if (cached && !isCacheStale()) return cached;
+      if (cached) {
+        fetchFromApi()
+          .then((fresh) => {
+            if (JSON.stringify(cached.reviews) !== JSON.stringify(fresh.reviews)) {
+              onUpdate(fresh);
+            }
+          })
+          .catch(() => {});
+        return cached;
+      }
+      return fetchFromApi();
+    }
 
-  function StarIcon() {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="#FBBF24" stroke="none">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-      </svg>
-    );
-  }
+    function buildDisplayPair(raw: any[]): [any | null, any | null] {
+      const fiveStar = raw.filter((r: any) => Number(r.rating) === 5);
+      const sorted = [...fiveStar].sort((a: any, b: any) => {
+        const aThumb = a.user?.thumbnail ? 1 : 0;
+        const bThumb = b.user?.thumbnail ? 1 : 0;
+        if (aThumb !== bThumb) return bThumb - aThumb;
+        const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;
+        const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;
+        return bText - aText;
+      });
 
-  function ReviewCard({ review }: { review: any }) {
-    const highResThumbnail = review?.user?.thumbnail
-      ? review.user.thumbnail.replace(/=s\d+/, '=s400')
-      : null;
-    const defaultInitials = (review?.user?.name || '?')
-      .split(' ')
-      .map((n: string) => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-    const hue =
-      (review?.user?.name || '')
-        .split('')
-        .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;
-    const googleReviewLink =
-      review?.link ||
-      'https://search.google.com/local/writereview?placeid=' + PLACE_ID;
+      const findByName = (name: string | null) => {
+        if (!name) return null;
+        return sorted.find(
+          (r: any) =>
+            (r.user?.name || '').toLowerCase().trim() === name.toLowerCase().trim()
+        ) ?? null;
+      };
 
-    return (
-      <div className="testi-review-card">
-        <span className="big-quote" aria-hidden="true">"</span>
-        <p className="testi-quote-text">
-          {review?.snippet || 'Fantastisk service og oplevelse!'}
-        </p>
-        <div className="testi-author-row">
-          {highResThumbnail ? (
-            <img src={highResThumbnail} alt={review?.user?.name} className="author-avatar" />
-          ) : (
-            <div className="author-avatar-fallback" style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}>
-              {defaultInitials}
-            </div>
-          )}
-          <div className="author-info">
-            <div className="testi-stars">
-              {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
-            </div>
-            <p className="author-name">{review?.user?.name || 'Anonym'}</p>
-            <p className="author-meta">Verificeret Google-anmeldelse</p>
-          </div>
-          <a href={googleReviewLink} target="_blank" rel="noopener noreferrer" className="google-badge" title="Se anmeldelse på Google">
-            <GoogleG size={14} />
-            <span className="google-badge-text">Google</span>
-          </a>
-        </div>
-      </div>
-    );
-  }
+      const pinned1 = findByName(PINNED_REVIEW_1);
+      const pinned2 = findByName(PINNED_REVIEW_2);
+      const pinnedSet = new Set([pinned1, pinned2].filter(Boolean));
+      const pool = sorted.filter((r) => !pinnedSet.has(r));
+      const slot1 = pinned1 ?? pool.shift() ?? null;
+      const slot2 = pinned2 ?? pool.shift() ?? null;
+      return [slot1, slot2];
+    }
 
-  const Testimonials: React.FC = () => {
-    const [review1, setReview1] = useState<any | null>(null);
-    const [review2, setReview2] = useState<any | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError]     = useState(false);
-
-    const applyReviews = useCallback((raw: any[]) => {
-      const [r1, r2] = buildDisplayPair(raw);
-      setReview1(r1);
-      setReview2(r2);
-    }, []);
-
-    useEffect(() => {
-      getReviews((fresh) => applyReviews(fresh.reviews))
-        .then((d) => {
-          if (!d) return;
-          applyReviews(d.reviews);
-          setLoading(false);
-        })
-        .catch(() => {
-          setError(true);
-          setLoading(false);
-        });
-    }, [applyReviews]);
-
-    if (loading) {
+    function GoogleG({ size = 14 }: { size?: number }) {
       return (
-        <section className="py-0">
-          <style>{`
-            @keyframes testi-shimmer {
-              0%   { background-position: -600px 0; }
-              100% { background-position:  600px 0; }
-            }
-            .testi-skel {
-              background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);
-              background-size: 600px 100%;
-              animation: testi-shimmer 1.6s infinite linear;
-              border-radius: 6px;
-            }
-          `}</style>
-          <div className="container">
-            <div className="rounded-xl p-10 flex flex-col gap-6" style={{ background: 'transparent' }}>
-              <div className="testi-skel" style={{ height: 40, width: 32 }} />
-              <div>
-                <div className="testi-skel" style={{ height: 18, marginBottom: 10 }} />
-                <div className="testi-skel" style={{ height: 18, marginBottom: 10, width: '88%' }} />
-                <div className="testi-skel" style={{ height: 18, width: '70%' }} />
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+        </svg>
+      );
+    }
+
+    function StarIcon() {
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#FBBF24" stroke="none">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    }
+
+    function ReviewCard({ review }: { review: any }) {
+      const highResThumbnail = review?.user?.thumbnail
+        ? review.user.thumbnail.replace(/=s\d+/, '=s400')
+        : null;
+      const defaultInitials = (review?.user?.name || '?')
+        .split(' ')
+        .map((n: string) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+      const hue =
+        (review?.user?.name || '')
+          .split('')
+          .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;
+      const googleReviewLink =
+        review?.link ||
+        'https://search.google.com/local/writereview?placeid=' + PLACE_ID;
+
+      return (
+        <div className="testi-review-card">
+          <span className="big-quote" aria-hidden="true">"</span>
+          <p className="testi-quote-text">
+            {review?.snippet || 'Fantastisk service og oplevelse!'}
+          </p>
+          <div className="testi-author-row">
+            {highResThumbnail ? (
+              <img src={highResThumbnail} alt={review?.user?.name} className="author-avatar" />
+            ) : (
+              <div className="author-avatar-fallback" style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}>
+                {defaultInitials}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                <div className="testi-skel" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div className="testi-skel" style={{ height: 13, width: 110, marginBottom: 8 }} />
-                  <div className="testi-skel" style={{ height: 11, width: 80 }} />
+            )}
+            <div className="author-info">
+              <div className="testi-stars">
+                {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}
+              </div>
+              <p className="author-name">{review?.user?.name || 'Anonym'}</p>
+              <p className="author-meta">Verificeret Google-anmeldelse</p>
+            </div>
+            <a href={googleReviewLink} target="_blank" rel="noopener noreferrer" className="google-badge" title="Se anmeldelse på Google">
+              <GoogleG size={14} />
+              <span className="google-badge-text">Google</span>
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    const Testimonials: React.FC = () => {
+      const [review1, setReview1] = useState<any | null>(null);
+      const [review2, setReview2] = useState<any | null>(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError]     = useState(false);
+
+      const applyReviews = useCallback((raw: any[]) => {
+        const [r1, r2] = buildDisplayPair(raw);
+        setReview1(r1);
+        setReview2(r2);
+      }, []);
+
+      useEffect(() => {
+        getReviews((fresh) => applyReviews(fresh.reviews))
+          .then((d) => {
+            if (!d) return;
+            applyReviews(d.reviews);
+            setLoading(false);
+          })
+          .catch(() => {
+            setError(true);
+            setLoading(false);
+          });
+      }, [applyReviews]);
+
+      if (loading) {
+        return (
+          <section className="py-0">
+            <style>{`
+              @keyframes testi-shimmer {
+                0%   { background-position: -600px 0; }
+                100% { background-position:  600px 0; }
+              }
+              .testi-skel {
+                background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);
+                background-size: 600px 100%;
+                animation: testi-shimmer 1.6s infinite linear;
+                border-radius: 6px;
+              }
+            `}</style>
+            <div className="container">
+              <div className="rounded-xl p-10 flex flex-col gap-6" style={{ background: 'transparent' }}>
+                <div className="testi-skel" style={{ height: 40, width: 32 }} />
+                <div>
+                  <div className="testi-skel" style={{ height: 18, marginBottom: 10 }} />
+                  <div className="testi-skel" style={{ height: 18, marginBottom: 10, width: '88%' }} />
+                  <div className="testi-skel" style={{ height: 18, width: '70%' }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                  <div className="testi-skel" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="testi-skel" style={{ height: 13, width: 110, marginBottom: 8 }} />
+                    <div className="testi-skel" style={{ height: 11, width: 80 }} />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-      );
-    }
+          </section>
+        );
+      }
 
-    if (error || !review1) {
+      if (error || !review1) {
+        return (
+          <section className="py-0">
+            <div className="container">
+              <div className="rounded-xl p-10 flex items-center justify-center" style={{ background: 'transparent' }}>
+                <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>
+              </div>
+            </div>
+          </section>
+        );
+      }
+
       return (
         <section className="py-0">
-          <div className="container">
-            <div className="rounded-xl p-10 flex items-center justify-center" style={{ background: 'transparent' }}>
-              <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>
+          <style>{`
+            .testi-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 0;
+            }
+            .testi-grid--solo {
+              grid-template-columns: 1fr;
+            }
+            @media (max-width: 768px) {
+              .testi-grid {
+                grid-template-columns: 1fr;
+              }
+              .testi-grid > .testi-review-card:nth-child(2) {
+                display: none;
+              }
+            }
+            .testi-review-card {
+              background: transparent;
+              padding: 48px 0;
+              display: flex;
+              flex-direction: column;
+              position: relative;
+            }
+            @media (min-width: 769px) {
+              .testi-grid:not(.testi-grid--solo) > .testi-review-card:first-child {
+                padding-right: 48px;
+                border-right: 1px solid #2a2a2a;
+              }
+              .testi-grid:not(.testi-grid--solo) > .testi-review-card:last-child {
+                padding-left: 48px;
+              }
+            }
+            @media (max-width: 768px) {
+              .testi-review-card { padding: 24px 0; }
+              .big-quote { font-size: 3.5rem !important; }
+              .testi-quote-text { font-size: 1rem !important; }
+            }
+            .big-quote {
+              font-size: 5rem;
+              line-height: 0.7;
+              color: #3B82F6;
+              font-family: Georgia, serif;
+              font-weight: 700;
+              user-select: none;
+              display: block;
+              margin-bottom: 8px;
+            }
+            .testi-quote-text {
+              font-family: 'Inter', sans-serif;
+              font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+              font-weight: 400;
+              color: #f0f0f0;
+              line-height: 1.65;
+              letter-spacing: -0.01em;
+              margin: 0;
+              flex: 1;
+            }
+            .testi-author-row {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              margin-top: 32px;
+              padding-top: 20px;
+            }
+            .author-avatar {
+              width: 56px; height: 56px;
+              border-radius: 50%;
+              object-fit: cover;
+              flex-shrink: 0;
+            }
+            .author-avatar-fallback {
+              width: 56px; height: 56px;
+              border-radius: 50%;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 1.2rem; font-weight: 700; color: white;
+              flex-shrink: 0;
+            }
+            .author-info { flex: 1; min-width: 0; }
+            .author-name {
+              font-size: 0.9rem;
+              font-weight: 700;
+              color: #ffffff;
+              margin: 0 0 2px 0;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            .author-meta {
+              font-size: 0.75rem;
+              color: #A3A3A3;
+              margin: 0;
+            }
+            .google-badge {
+              display: flex; align-items: center; gap: 5px;
+              text-decoration: none;
+              padding: 5px 10px;
+              border-radius: 6px;
+              border: 1px solid #404040;
+              background: transparent;
+              transition: border-color 0.2s ease;
+              flex-shrink: 0;
+            }
+            .google-badge:hover { border-color: #0F52BA; }
+            .google-badge-text {
+              font-size: 0.7rem;
+              font-weight: 600;
+              color: #CCCCCC;
+              letter-spacing: 0.04em;
+            }
+            .testi-stars {
+              display: flex;
+              gap: 2px;
+              margin-bottom: 6px;
+            }
+          `}</style>
+          <div className="w-full max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className={`testi-grid${!review2 ? ' testi-grid--solo' : ''}`}>
+              <ReviewCard review={review1} />
+              {review2 && <ReviewCard review={review2} />}
             </div>
           </div>
         </section>
       );
-    }
-
-    return (
-      <section className="py-0">
-        <style>{`
-          .testi-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0;
-          }
-          .testi-grid--solo {
-            grid-template-columns: 1fr;
-          }
-          @media (max-width: 768px) {
-            .testi-grid {
-              grid-template-columns: 1fr;
-            }
-            .testi-grid > .testi-review-card:nth-child(2) {
-              display: none;
-            }
-          }
-          .testi-review-card {
-            background: transparent;
-            padding: 48px 0;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-          }
-          @media (min-width: 769px) {
-            .testi-grid:not(.testi-grid--solo) > .testi-review-card:first-child {
-              padding-right: 48px;
-              border-right: 1px solid #2a2a2a;
-            }
-            .testi-grid:not(.testi-grid--solo) > .testi-review-card:last-child {
-              padding-left: 48px;
-            }
-          }
-          @media (max-width: 768px) {
-            .testi-review-card { padding: 24px 0; }
-            .big-quote { font-size: 3.5rem !important; }
-            .testi-quote-text { font-size: 1rem !important; }
-          }
-          .big-quote {
-            font-size: 5rem;
-            line-height: 0.7;
-            color: #3B82F6;
-            font-family: Georgia, serif;
-            font-weight: 700;
-            user-select: none;
-            display: block;
-            margin-bottom: 8px;
-          }
-          .testi-quote-text {
-            font-family: 'Inter', sans-serif;
-            font-size: clamp(1.05rem, 1.8vw, 1.35rem);
-            font-weight: 400;
-            color: #f0f0f0;
-            line-height: 1.65;
-            letter-spacing: -0.01em;
-            margin: 0;
-            flex: 1;
-          }
-          .testi-author-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-top: 32px;
-            padding-top: 20px;
-          }
-          .author-avatar {
-            width: 56px; height: 56px;
-            border-radius: 50%;
-            object-fit: cover;
-            flex-shrink: 0;
-          }
-          .author-avatar-fallback {
-            width: 56px; height: 56px;
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.2rem; font-weight: 700; color: white;
-            flex-shrink: 0;
-          }
-          .author-info { flex: 1; min-width: 0; }
-          .author-name {
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: #ffffff;
-            margin: 0 0 2px 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .author-meta {
-            font-size: 0.75rem;
-            color: #A3A3A3;
-            margin: 0;
-          }
-          .google-badge {
-            display: flex; align-items: center; gap: 5px;
-            text-decoration: none;
-            padding: 5px 10px;
-            border-radius: 6px;
-            border: 1px solid #404040;
-            background: transparent;
-            transition: border-color 0.2s ease;
-            flex-shrink: 0;
-          }
-          .google-badge:hover { border-color: #0F52BA; }
-          .google-badge-text {
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: #CCCCCC;
-            letter-spacing: 0.04em;
-          }
-          .testi-stars {
-            display: flex;
-            gap: 2px;
-            margin-bottom: 6px;
-          }
-        `}</style>
-        <div className="w-full max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className={`testi-grid${!review2 ? ' testi-grid--solo' : ''}`}>
-            <ReviewCard review={review1} />
-            {review2 && <ReviewCard review={review2} />}
-          </div>
-        </div>
-      </section>
-    );
-  };
-  return Testimonials;
+    };
+  return (() => null) as React.ComponentType;
 })(
   React.useState, React.useEffect, React.useCallback
 ) as React.ComponentType;
@@ -659,7 +659,7 @@ export const DEPLOYED_HOME_SECTIONS = [
     "code_language": null,
     "code_files": [
       {
-        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n// ─── Config ───────────────────────────────────────────────────────────────────\nconst SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\nconst SUPABASE_KEY =\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\nconst PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\nconst STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\nconst EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\nconst RATING_KEY = 'flai_rating_' + PLACE_ID;\n\nexport default Testimonials;",
+        "content": "import React, { useEffect, useState, useCallback } from 'react';\n\n // ─── Config ───────────────────────────────────────────────────────────────────\n  const SUPABASE_URL = 'https://kzvdgdfxxkxeaihrqigd.supabase.co';\n  const SUPABASE_KEY =\n    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6dmRnZGZ4eGt4ZWFpaHJxaWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDQwNzQsImV4cCI6MjA4MDYyMDA3NH0.ZOmXme0uhK5gi7MTEnzJgY1mHiRGQZIgrvGQ1-nTwsw';\n  const PLACE_ID = 'ChIJq5JklwgFuQ0RREPIKUg0EHs';\n  const STORAGE_KEY = 'flai_reviews_' + PLACE_ID;\n  const EXPIRES_AT_KEY = 'flai_expires_' + PLACE_ID;\n  const RATING_KEY = 'flai_rating_' + PLACE_ID;\n\n  // ─── Hardcoded pinned reviewer names ─────────────────────────────────────────\n  const PINNED_REVIEW_1: string | null = null;\n  const PINNED_REVIEW_2: string | null = null;\n\n  // ─── Cache helpers ────────────────────────────────────────────────────────────\n  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;\n\n  function isCacheStale() {\n    const exp = localStorage.getItem(EXPIRES_AT_KEY);\n    if (!exp) return true;\n    return Date.now() >= Number(exp);\n  }\n\n  function readCache() {\n    const raw    = localStorage.getItem(STORAGE_KEY);\n    const rating = localStorage.getItem(RATING_KEY);\n    if (!raw || !rating) return null;\n    try { return { reviews: JSON.parse(raw) as any[], rating }; }\n    catch { return null; }\n  }\n\n  function saveToCache(reviews: any[], rating: string | number) {\n    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));\n    localStorage.setItem(RATING_KEY, String(rating));\n    localStorage.setItem(EXPIRES_AT_KEY, String(Date.now() + CACHE_TTL_MS));\n  }\n\n  async function fetchFromApi() {\n    const res = await fetch(\n      SUPABASE_URL + '/functions/v1/fetch-reviews?place_id=' + PLACE_ID,\n      { headers: { Authorization: 'Bearer ' + SUPABASE_KEY } }\n    );\n    if (!res.ok) throw new Error('API error');\n    const data = await res.json();\n    if (!data.reviews || !data.reviews.length) throw new Error('Empty');\n    saveToCache(data.reviews, data.rating || '0.0');\n    return { reviews: data.reviews as any[], rating: String(data.rating || '0.0') };\n  }\n\n  async function getReviews(\n    onUpdate: (d: { reviews: any[]; rating: string }) => void\n  ): Promise<{ reviews: any[]; rating: string } | null> {\n    const cached = readCache();\n    if (cached && !isCacheStale()) return cached;\n    if (cached) {\n      fetchFromApi()\n        .then((fresh) => {\n          if (JSON.stringify(cached.reviews) !== JSON.stringify(fresh.reviews)) {\n            onUpdate(fresh);\n          }\n        })\n        .catch(() => {});\n      return cached;\n    }\n    return fetchFromApi();\n  }\n\n  function buildDisplayPair(raw: any[]): [any | null, any | null] {\n    const fiveStar = raw.filter((r: any) => Number(r.rating) === 5);\n    const sorted = [...fiveStar].sort((a: any, b: any) => {\n      const aThumb = a.user?.thumbnail ? 1 : 0;\n      const bThumb = b.user?.thumbnail ? 1 : 0;\n      if (aThumb !== bThumb) return bThumb - aThumb;\n      const aText = (a.snippet || '').trim().length > 0 ? 1 : 0;\n      const bText = (b.snippet || '').trim().length > 0 ? 1 : 0;\n      return bText - aText;\n    });\n\n    const findByName = (name: string | null) => {\n      if (!name) return null;\n      return sorted.find(\n        (r: any) =>\n          (r.user?.name || '').toLowerCase().trim() === name.toLowerCase().trim()\n      ) ?? null;\n    };\n\n    const pinned1 = findByName(PINNED_REVIEW_1);\n    const pinned2 = findByName(PINNED_REVIEW_2);\n    const pinnedSet = new Set([pinned1, pinned2].filter(Boolean));\n    const pool = sorted.filter((r) => !pinnedSet.has(r));\n    const slot1 = pinned1 ?? pool.shift() ?? null;\n    const slot2 = pinned2 ?? pool.shift() ?? null;\n    return [slot1, slot2];\n  }\n\n  function GoogleG({ size = 14 }: { size?: number }) {\n    return (\n      <svg width={size} height={size} viewBox=\"0 0 24 24\" fill=\"none\">\n        <path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\" />\n        <path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\" />\n        <path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\" />\n        <path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\" />\n      </svg>\n    );\n  }\n\n  function StarIcon() {\n    return (\n      <svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"#FBBF24\" stroke=\"none\">\n        <path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\" />\n      </svg>\n    );\n  }\n\n  function ReviewCard({ review }: { review: any }) {\n    const highResThumbnail = review?.user?.thumbnail\n      ? review.user.thumbnail.replace(/=s\\d+/, '=s400')\n      : null;\n    const defaultInitials = (review?.user?.name || '?')\n      .split(' ')\n      .map((n: string) => n[0])\n      .slice(0, 2)\n      .join('')\n      .toUpperCase();\n    const hue =\n      (review?.user?.name || '')\n        .split('')\n        .reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;\n    const googleReviewLink =\n      review?.link ||\n      'https://search.google.com/local/writereview?placeid=' + PLACE_ID;\n\n    return (\n      <div className=\"testi-review-card\">\n        <span className=\"big-quote\" aria-hidden=\"true\">\"</span>\n        <p className=\"testi-quote-text\">\n          {review?.snippet || 'Fantastisk service og oplevelse!'}\n        </p>\n        <div className=\"testi-author-row\">\n          {highResThumbnail ? (\n            <img src={highResThumbnail} alt={review?.user?.name} className=\"author-avatar\" />\n          ) : (\n            <div className=\"author-avatar-fallback\" style={{ backgroundColor: `hsl(${hue}, 35%, 28%)` }}>\n              {defaultInitials}\n            </div>\n          )}\n          <div className=\"author-info\">\n            <div className=\"testi-stars\">\n              {[1, 2, 3, 4, 5].map((i) => <StarIcon key={i} />)}\n            </div>\n            <p className=\"author-name\">{review?.user?.name || 'Anonym'}</p>\n            <p className=\"author-meta\">Verificeret Google-anmeldelse</p>\n          </div>\n          <a href={googleReviewLink} target=\"_blank\" rel=\"noopener noreferrer\" className=\"google-badge\" title=\"Se anmeldelse på Google\">\n            <GoogleG size={14} />\n            <span className=\"google-badge-text\">Google</span>\n          </a>\n        </div>\n      </div>\n    );\n  }\n\n  const Testimonials: React.FC = () => {\n    const [review1, setReview1] = useState<any | null>(null);\n    const [review2, setReview2] = useState<any | null>(null);\n    const [loading, setLoading] = useState(true);\n    const [error, setError]     = useState(false);\n\n    const applyReviews = useCallback((raw: any[]) => {\n      const [r1, r2] = buildDisplayPair(raw);\n      setReview1(r1);\n      setReview2(r2);\n    }, []);\n\n    useEffect(() => {\n      getReviews((fresh) => applyReviews(fresh.reviews))\n        .then((d) => {\n          if (!d) return;\n          applyReviews(d.reviews);\n          setLoading(false);\n        })\n        .catch(() => {\n          setError(true);\n          setLoading(false);\n        });\n    }, [applyReviews]);\n\n    if (loading) {\n      return (\n        <section className=\"py-0\">\n          <style>{`\n            @keyframes testi-shimmer {\n              0%   { background-position: -600px 0; }\n              100% { background-position:  600px 0; }\n            }\n            .testi-skel {\n              background: linear-gradient(90deg, #1e1e1e 25%, #282828 50%, #1e1e1e 75%);\n              background-size: 600px 100%;\n              animation: testi-shimmer 1.6s infinite linear;\n              border-radius: 6px;\n            }\n          `}</style>\n          <div className=\"container\">\n            <div className=\"rounded-xl p-10 flex flex-col gap-6\" style={{ background: 'transparent' }}>\n              <div className=\"testi-skel\" style={{ height: 40, width: 32 }} />\n              <div>\n                <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10 }} />\n                <div className=\"testi-skel\" style={{ height: 18, marginBottom: 10, width: '88%' }} />\n                <div className=\"testi-skel\" style={{ height: 18, width: '70%' }} />\n              </div>\n              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>\n                <div className=\"testi-skel\" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />\n                <div style={{ flex: 1 }}>\n                  <div className=\"testi-skel\" style={{ height: 13, width: 110, marginBottom: 8 }} />\n                  <div className=\"testi-skel\" style={{ height: 11, width: 80 }} />\n                </div>\n              </div>\n            </div>\n          </div>\n        </section>\n      );\n    }\n\n    if (error || !review1) {\n      return (\n        <section className=\"py-0\">\n          <div className=\"container\">\n            <div className=\"rounded-xl p-10 flex items-center justify-center\" style={{ background: 'transparent' }}>\n              <p style={{ color: '#737373', fontSize: '0.875rem' }}>Kunne ikke indlæse anmeldelser.</p>\n            </div>\n          </div>\n        </section>\n      );\n    }\n\n    return (\n      <section className=\"py-0\">\n        <style>{`\n          .testi-grid {\n            display: grid;\n            grid-template-columns: 1fr 1fr;\n            gap: 0;\n          }\n          .testi-grid--solo {\n            grid-template-columns: 1fr;\n          }\n          @media (max-width: 768px) {\n            .testi-grid {\n              grid-template-columns: 1fr;\n            }\n            .testi-grid > .testi-review-card:nth-child(2) {\n              display: none;\n            }\n          }\n          .testi-review-card {\n            background: transparent;\n            padding: 48px 0;\n            display: flex;\n            flex-direction: column;\n            position: relative;\n          }\n          @media (min-width: 769px) {\n            .testi-grid:not(.testi-grid--solo) > .testi-review-card:first-child {\n              padding-right: 48px;\n              border-right: 1px solid #2a2a2a;\n            }\n            .testi-grid:not(.testi-grid--solo) > .testi-review-card:last-child {\n              padding-left: 48px;\n            }\n          }\n          @media (max-width: 768px) {\n            .testi-review-card { padding: 24px 0; }\n            .big-quote { font-size: 3.5rem !important; }\n            .testi-quote-text { font-size: 1rem !important; }\n          }\n          .big-quote {\n            font-size: 5rem;\n            line-height: 0.7;\n            color: #3B82F6;\n            font-family: Georgia, serif;\n            font-weight: 700;\n            user-select: none;\n            display: block;\n            margin-bottom: 8px;\n          }\n          .testi-quote-text {\n            font-family: 'Inter', sans-serif;\n            font-size: clamp(1.05rem, 1.8vw, 1.35rem);\n            font-weight: 400;\n            color: #f0f0f0;\n            line-height: 1.65;\n            letter-spacing: -0.01em;\n            margin: 0;\n            flex: 1;\n          }\n          .testi-author-row {\n            display: flex;\n            align-items: center;\n            gap: 12px;\n            margin-top: 32px;\n            padding-top: 20px;\n          }\n          .author-avatar {\n            width: 56px; height: 56px;\n            border-radius: 50%;\n            object-fit: cover;\n            flex-shrink: 0;\n          }\n          .author-avatar-fallback {\n            width: 56px; height: 56px;\n            border-radius: 50%;\n            display: flex; align-items: center; justify-content: center;\n            font-size: 1.2rem; font-weight: 700; color: white;\n            flex-shrink: 0;\n          }\n          .author-info { flex: 1; min-width: 0; }\n          .author-name {\n            font-size: 0.9rem;\n            font-weight: 700;\n            color: #ffffff;\n            margin: 0 0 2px 0;\n            white-space: nowrap;\n            overflow: hidden;\n            text-overflow: ellipsis;\n          }\n          .author-meta {\n            font-size: 0.75rem;\n            color: #A3A3A3;\n            margin: 0;\n          }\n          .google-badge {\n            display: flex; align-items: center; gap: 5px;\n            text-decoration: none;\n            padding: 5px 10px;\n            border-radius: 6px;\n            border: 1px solid #404040;\n            background: transparent;\n            transition: border-color 0.2s ease;\n            flex-shrink: 0;\n          }\n          .google-badge:hover { border-color: #0F52BA; }\n          .google-badge-text {\n            font-size: 0.7rem;\n            font-weight: 600;\n            color: #CCCCCC;\n            letter-spacing: 0.04em;\n          }\n          .testi-stars {\n            display: flex;\n            gap: 2px;\n            margin-bottom: 6px;\n          }\n        `}</style>\n        <div className=\"w-full max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8\">\n          <div className={`testi-grid${!review2 ? ' testi-grid--solo' : ''}`}>\n            <ReviewCard review={review1} />\n            {review2 && <ReviewCard review={review2} />}\n          </div>\n        </div>\n      </section>\n    );\n  };\n\nexport default Testimonials;",
         "filename": "component.tsx",
         "language": "tsx"
       }
@@ -806,7 +806,7 @@ const HomePage: React.FC = () => {
           const CodeComp = CODE_SECTION_COMPONENTS[section.id];
           if (!CodeComp) return null;
           return (
-            <section key={section.id} className="bg-neutral-800 border-0 outline-none">
+            <section key={section.id} className="bg-neutral-800 border-0 outline-none p-0 [&>*>section]:!py-10 md:[&>*>section]:!py-20">
               <div className="w-full">
                 <CodeComp />
               </div>
