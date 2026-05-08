@@ -423,7 +423,7 @@ const ProductPage: React.FC = () => {
                       </li>
                       <li className="flex items-center">
                         <span className="w-2 h-2 bg-primary rounded-full mr-3"></span>
-                        <EditableContent contentKey="product-page-video-feature-3" fallback="Levering inden for 3-5 dage" />
+                        <EditableContent contentKey="product-page-video-feature-3" fallback="Levering inden for 5-7 dage" />
                       </li>
                     </>
                   ) : (
