@@ -126,7 +126,7 @@ const Footer: React.FC = () => {
                 <li><Link to="/portfolio" className="hover:text-white transition-colors"><EditableContent contentKey="footer-link-portfolio" fallback="Vores arbejde" /></Link></li>
                 <li><Link to="/coverage" className="hover:text-white transition-colors"><EditableContent contentKey="footer-link-coverage" fallback="Vi dækker" /></Link></li>
                 <li><Link to="/merch" className="hover:text-white transition-colors"><EditableContent contentKey="footer-link-merch" fallback="Merchandise" /></Link></li>
-                <li><Link to="/ratings" className="hover:text-white transition-colors"><EditableContent contentKey="footer-anmeldelser" fallback="Anmeldelser" /></Link></li>
+
               </ul>
             </div>
           </div>
