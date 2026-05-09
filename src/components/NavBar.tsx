@@ -108,7 +108,6 @@ const NavBar: React.FC = () => {
           <Link to="/products" className={linkClasses}><EditableContent contentKey="nav-bar-vores-tjenester-2" fallback="Vores tjenester" /></Link>
           <Link to="/portfolio" className={linkClasses}><EditableContent contentKey="nav-bar-vores-arbejde-2" fallback="Vores arbejde" /></Link>
           <Link to="/coverage" className={linkClasses}><EditableContent contentKey="nav-bar-vi-daekker-2" fallback="Vi dækker" /></Link>
-          <Link to="/ratings" className={linkClasses}><EditableContent contentKey="nav-bar-anmeldelser-2" fallback="Anmeldelser" /></Link>
           <button onClick={scrollToFooter} className={linkClasses}><EditableContent contentKey="nav-bar-kontakt-2" fallback="Kontakt" /></button>
           
           {/* Search Button */}
