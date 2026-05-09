@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, Component } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { isAddressWithinRange, getFormattedDistance } from '../utils/location';
 import { CONTENT_KEYS } from 'virtual:content-keys';
 import ProductCard from './ProductCard';
+import PanoramaViewer from './PanoramaViewer'; // ✅ FIX: Added missing import
 import {
   Sparkles, Send, MapPin, Loader2, X, CheckCircle, XCircle, ArrowRight,
 } from 'lucide-react';
@@ -12,8 +13,6 @@ import { Product } from '../types';
 import { DEPLOYED_HOME_SECTIONS } from '../pages/HomePage';
 
 // ─── API config ───────────────────────────────────────────────────────────────
-// All AI calls go through the Netlify proxy function so API keys stay
-// server-side and Gemini's domain-allowlist restriction doesn't apply.
 const AI_PROXY_URL = '/.netlify/functions/ai-proxy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,7 +44,48 @@ interface Message {
   isPersonalised?: boolean;
 }
 
-// ─── Module-level cache (survives re-renders, cleared on page nav) ────────────
+// ─── Error Boundary ✅ FIX: Prevents black screen on render errors ─────────────
+class ErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(e: Error) {
+    return { error: e.message };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[AiCTA ErrorBoundary]', error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            color: '#fca5a5',
+            fontSize: '.8rem',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ margin: '0 0 4px', fontWeight: 600 }}>Noget gik galt</p>
+          <p style={{ margin: 0, opacity: 0.75 }}>
+            Prøv igen eller kontakt os på{' '}
+            <a href="mailto:fb@flai.dk" style={{ color: '#fca5a5' }}>fb@flai.dk</a>
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Module-level cache ───────────────────────────────────────────────────────
 let _cachedProducts: Product[] | null = null;
 let _cachedPortfolio: any[] | null = null;
 
@@ -72,7 +112,7 @@ async function fetchPortfolioCached(): Promise<any[]> {
   } catch { return []; }
 }
 
-// ─── API caller — routes through Netlify function ─────────────────────────────
+// ─── API caller ───────────────────────────────────────────────────────────────
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -97,20 +137,17 @@ async function callAI(systemPrompt: string, history: HistoryEntry[]): Promise<st
   return data.text;
 }
 
-// ─── JSON extraction — robust against markdown fences and leading text ─────────
+// ─── JSON extraction ──────────────────────────────────────────────────────────
 function extractJSON(raw: string): string | null {
-  // Strip markdown fences
   const stripped = raw.replace(/```[\w]*\n?/g, '').trim();
-  // Find outermost { }
   const start = stripped.indexOf('{');
   const end   = stripped.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
   return stripped.slice(start, end + 1);
 }
 
-// ─── Fallback when AI fails completely ───────────────────────────────────────
+// ─── Fallback ─────────────────────────────────────────────────────────────────
 function keywordFallback(userMessage?: string): AIDecision {
-  // Try to give a meaningful response based on keywords before giving up
   const msg = (userMessage ?? '').toLowerCase();
 
   if (/pris|kost|kr|pakke|produkt/.test(msg)) {
@@ -154,7 +191,7 @@ function mergeHomeSections(dbSections: any[], isDbLoaded: boolean): any[] {
 
 const VALID_INTENTS = new Set<Intent>(['products', 'portfolio', 'coverage', 'general', 'reasoning']);
 
-// ─── System prompt — tighter, clearer, JSON-first ────────────────────────────
+// ─── System prompt ────────────────────────────────────────────────────────────
 function buildSystemPrompt(
   products: Product[],
   addressZones: any[],
@@ -162,9 +199,8 @@ function buildSystemPrompt(
   homeSections: any[],
   portfolioItems: any[],
 ): string {
-  // Build content map
   const merged = new Map<string, string>();
-  Object.values(siteContent).forEach(({ key, value, type }) => {
+  Object.values(siteContent ?? {}).forEach(({ key, value, type }) => {
     if (SKIP_PREFIXES.some((p) => key.startsWith(p))) return;
     if (type === 'image' || type === 'color') return;
     if (isUINoiseKey(key)) return;
@@ -178,7 +214,6 @@ function buildSystemPrompt(
     if (fallback?.trim().length > 3) merged.set(key, fallback.trim());
   });
 
-  // Group by prefix, skip seo/meta
   const grouped = new Map<string, Array<[string, string]>>();
   Array.from(merged.entries())
     .filter(([k]) => !k.includes('meta') && !k.includes('seo'))
@@ -199,14 +234,14 @@ function buildSystemPrompt(
     .map((z: any) => `  ${z.name}: center="${z.center_address}" radius=${z.radius_km}km`)
     .join('\n') || '  (ingen konfigureret)';
 
-  const productList = products.length
+  const productList = (products ?? []).length
     ? products
         .sort((a, b) => (b as any).array - (a as any).array || 0)
         .map((p) => `  [${p.id}] ${p.name} | pris: ${(p as any).price ?? 'se hjemmeside'} | ${p.description ?? ''}`)
         .join('\n')
     : '  (ingen produkter)';
 
-  const portfolioList = portfolioItems.length
+  const portfolioList = (portfolioItems ?? []).length
     ? portfolioItems
         .sort((a, b) => (b.array ?? 50) - (a.array ?? 50))
         .map((img) => {
@@ -291,8 +326,8 @@ HJEMMESIDEINDHOLD:
 ${contentLines.join('\n')}`;
 }
 
-// ─── Core AI call with robust JSON parsing ────────────────────────────────────
-const MAX_HISTORY = 10; // Keep last 5 exchanges to avoid context overflow
+// ─── Core AI call ─────────────────────────────────────────────────────────────
+const MAX_HISTORY = 10;
 
 async function detectIntent(
   userMessage: string,
@@ -305,8 +340,6 @@ async function detectIntent(
   getContent: (key: string, fallback: string) => string,
 ): Promise<AIDecision> {
   const systemPrompt = buildSystemPrompt(products, addressZones, siteContent, homeSections, portfolioItems);
-
-  // Trim history to avoid context overflow — keep last N entries
   const trimmedHistory = history.slice(-MAX_HISTORY);
   const callHistory: HistoryEntry[] = [...trimmedHistory, { role: 'user', content: userMessage }];
 
@@ -328,13 +361,12 @@ async function detectIntent(
 
       const parsed = JSON.parse(jsonStr);
 
-      // Validate required fields
       if (!VALID_INTENTS.has(parsed.intent)) throw new Error(`Invalid intent: ${parsed.intent}`);
       if (typeof parsed.text !== 'string' || parsed.text.trim().length < 2) throw new Error('Missing text');
 
       const productIds = parsed.productIds ?? null;
       if (productIds !== null && productIds !== 'all' && !Array.isArray(productIds)) {
-        parsed.productIds = null; // Coerce bad value rather than throwing
+        parsed.productIds = null;
       }
 
       return {
@@ -356,6 +388,7 @@ async function detectIntent(
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 function formatAI(raw: string): string {
+  if (!raw) return ''; // ✅ FIX: Guard against undefined/null
   return raw
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.*?)__/g, '<strong>$1</strong>')
@@ -366,7 +399,7 @@ function formatAI(raw: string): string {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-const ITEMS_PER_ROW      = 2;
+const ITEMS_PER_ROW        = 2;
 const DEFAULT_ROWS_DESKTOP = 5;
 const DEFAULT_ROWS_MOBILE  = 4;
 
@@ -395,11 +428,11 @@ const PortfolioGrid: React.FC<{
       `}</style>
       <div className="aicta-portfolio-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
         {filtered.map((img, idx) => {
-          if (idx >= desktopItems) return null;
+          if (!img || idx >= desktopItems) return null; // ✅ FIX: Guard null img
           const hiddenOnMobile = idx >= mobileItems;
           const isYt   = img.image_url?.startsWith('youtube:');
           const isPano = img.image_url?.startsWith('panorama:');
-          const ytId = isYt ? img.image_url.split(':')[1] : null;
+          const ytId   = isYt ? img.image_url.split(':')[1] : null;
 
           return (
             <div
@@ -419,7 +452,7 @@ const PortfolioGrid: React.FC<{
                 </div>
               ) : isPano ? (
                 <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-                  <PanoramaViewer
+                  <PanoramaViewer // ✅ FIX: Now properly imported above
                     url={img.image_url.replace('panorama:', '')}
                     title={img.title}
                     autoRotate={0.5}
@@ -433,18 +466,26 @@ const PortfolioGrid: React.FC<{
               ) : (
                 <img
                   src={img.image_url}
-                  alt={img.title}
+                  alt={img.title ?? ''}
                   onClick={() => navigate('/portfolio')}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
                 />
               )}
+              {/* ✅ FIX: Title + description overlay */}
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(transparent,rgba(0,0,0,.7))',
-                fontSize: '.6rem', color: '#fff', padding: '8px 4px 3px',
-                pointerEvents: 'none', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                background: 'linear-gradient(transparent,rgba(0,0,0,.75))',
+                padding: '18px 8px 6px',
+                pointerEvents: 'none',
               }}>
-                {img.title}
+                <p style={{ margin: 0, fontSize: '.65rem', color: '#fff', fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                  {img.title ?? ''}
+                </p>
+                {img.description && (
+                  <p style={{ margin: '1px 0 0', fontSize: '.57rem', color: 'rgba(255,255,255,0.65)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {img.description}
+                  </p>
+                )}
               </div>
             </div>
           );
@@ -515,26 +556,24 @@ const CoverageResult: React.FC<{ result: { covered: boolean; distance?: string; 
 );
 
 // ─── Main component ───────────────────────────────────────────────────────────
-const AiCTA: React.FC = () => {
+const AiCTAInner: React.FC = () => {
   const navigate = useNavigate();
   const {
     getContent, siteContent, addressZones, isAddressZonesLoaded, refreshAddressZones,
     homeSections: dbHomeSections, isHomeSectionsLoaded, refreshHomeSections,
   } = useData();
 
-  const [messages, setMessages]             = useState<Message[]>([]);
-  const [input, setInput]                   = useState('');
-  const [loading, setLoading]               = useState(false);
+  const [messages, setMessages]               = useState<Message[]>([]);
+  const [input, setInput]                     = useState('');
+  const [loading, setLoading]                 = useState(false);
   const [coverageLoading, setCoverageLoading] = useState(false);
-  const [expanded, setExpanded]             = useState(false);
+  const [expanded, setExpanded]               = useState(false);
 
-  // Use ref for history to avoid stale closures in async handlers
-  const historyRef     = useRef<HistoryEntry[]>([]);
-  const inputRef       = useRef<HTMLInputElement>(null);
-  const msgsContRef    = useRef<HTMLDivElement>(null);
-  const shouldScroll   = useRef(false);
+  const historyRef   = useRef<HistoryEntry[]>([]);
+  const inputRef     = useRef<HTMLInputElement>(null);
+  const msgsContRef  = useRef<HTMLDivElement>(null);
+  const shouldScroll = useRef(false);
 
-  // Prefetch data in the background so first message is fast
   useEffect(() => {
     fetchProductsCached();
     fetchPortfolioCached();
@@ -586,7 +625,6 @@ const AiCTA: React.FC = () => {
     setLoading(true);
 
     try {
-      // Both fetches resolve from cache after the first call
       const [allProducts, allPortfolio] = await Promise.all([
         fetchProductsCached(),
         fetchPortfolioCached(),
@@ -595,12 +633,10 @@ const AiCTA: React.FC = () => {
       const sorted = [...allProducts].sort((a, b) => ((b as any).array ?? 50) - ((a as any).array ?? 50));
 
       const decision = await detectIntent(
-        q, sorted, addressZones, siteContent, homeSections,
+        q, sorted, addressZones ?? [], siteContent ?? {}, homeSections,
         historyRef.current, allPortfolio, getContent,
       );
 
-      // Update conversation history IMMEDIATELY after response (use text, not raw JSON)
-      // This ensures multi-turn works correctly
       historyRef.current = [
         ...historyRef.current.slice(-MAX_HISTORY),
         { role: 'user', content: q },
@@ -609,7 +645,6 @@ const AiCTA: React.FC = () => {
 
       const { intent, address, text, productIds, showProductsAfter, portfolioRows, portfolioIds } = decision;
 
-      // ── products intent ──
       if (intent === 'products') {
         let toShow: Product[];
         if (!productIds || productIds === 'all') {
@@ -624,7 +659,6 @@ const AiCTA: React.FC = () => {
         if (toShow.length > 0) addMsg({ type: 'products', products: toShow, isPersonalised }, false);
         else addMsg({ type: 'ai', text: 'Vi har ingen aktive produkter for øjeblikket. Kontakt os på fb@flai.dk.' });
 
-      // ── reasoning intent ──
       } else if (intent === 'reasoning') {
         addMsg({ type: 'ai', text });
         if (showProductsAfter) {
@@ -642,7 +676,6 @@ const AiCTA: React.FC = () => {
           }
         }
 
-      // ── portfolio intent ──
       } else if (intent === 'portfolio') {
         addMsg({ type: 'ai', text });
         if (allPortfolio.length > 0) {
@@ -651,17 +684,14 @@ const AiCTA: React.FC = () => {
           addMsg({ type: 'ai', text: 'Vi har ikke uploadet portfolio endnu. Følg os på Facebook @flai.dk!' });
         }
 
-      // ── coverage intent ──
       } else if (intent === 'coverage') {
         addMsg({ type: 'ai', text });
         if (address) {
           await handleCoverageCheck(address);
         } else {
-          // AI couldn't extract an address — show form
           addMsg({ type: 'coverage-form' });
         }
 
-      // ── general / fallback ──
       } else {
         addMsg({ type: 'ai', text });
       }
@@ -693,7 +723,7 @@ const AiCTA: React.FC = () => {
         </div>
       );
 
-    if (msg.type === 'ai')
+    if (msg.type === 'ai' && msg.text) // ✅ FIX: Guard ensures msg.text exists before rendering
       return (
         <div
           key={msg.id}
@@ -704,7 +734,7 @@ const AiCTA: React.FC = () => {
             border: '1px solid rgba(255,255,255,0.08)',
             fontSize: '.875rem', lineHeight: 1.7, maxWidth: '88%', textAlign: 'left',
           }}
-          dangerouslySetInnerHTML={{ __html: formatAI(msg.text ?? '') }}
+          dangerouslySetInnerHTML={{ __html: formatAI(msg.text) }}
         />
       );
 
@@ -874,5 +904,12 @@ const AiCTA: React.FC = () => {
     </>
   );
 };
+
+// ✅ FIX: Wrap export in ErrorBoundary so any render crash shows a graceful message instead of black screen
+const AiCTA: React.FC = () => (
+  <ErrorBoundary>
+    <AiCTAInner />
+  </ErrorBoundary>
+);
 
 export default AiCTA;
