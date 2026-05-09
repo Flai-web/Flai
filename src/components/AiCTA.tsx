@@ -746,11 +746,11 @@ const AiCTAInner: React.FC = () => {
             {msg.products.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
           <button
-            className="btn-secondary w-full mt-3 flex items-center justify-center gap-2"
-            style={{ fontSize: '.8rem', padding: '8px' }}
+            className="btn-primary w-full mt-3 flex items-center justify-center gap-2"
+            style={{ fontSize: '.875rem', padding: '10px' }}
             onClick={() => navigate('/produkter')}
           >
-            {msg.isPersonalised ? 'Se alle produkter' : 'Se produkter på hjemmesiden'} <ArrowRight size={13} />
+            Se alle vores tjenester <ArrowRight size={15} />
           </button>
         </div>
       );
