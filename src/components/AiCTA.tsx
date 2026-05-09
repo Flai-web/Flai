@@ -438,55 +438,57 @@ const PortfolioGrid: React.FC<{
             <div
               key={img.id}
               className={hiddenOnMobile ? 'aicta-portfolio-item--mobile-hidden' : ''}
-              style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9', background: 'var(--neutral-700,#404040)' }}
+              style={{ borderRadius: 10, overflow: 'hidden', background: 'var(--neutral-800,#262626)', border: '1px solid rgba(255,255,255,0.07)' }}
             >
-              {isYt ? (
-                <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%' }}>
-                  <iframe
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-                    src={`https://www.youtube.com/embed/${ytId}`}
-                    title={img.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              ) : isPano ? (
-                <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-                  <PanoramaViewer // ✅ FIX: Now properly imported above
-                    url={img.image_url.replace('panorama:', '')}
-                    title={img.title}
-                    autoRotate={0.5}
-                    className="w-full h-full"
-                  />
-                  <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 20, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', borderRadius: 999, padding: '2px 8px', pointerEvents: 'none' }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--primary,#0F52BA)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="5" ry="10"/><path d="M2 12h20"/></svg>
-                    <span style={{ color: '#fff', fontSize: '.6rem', fontWeight: 700, letterSpacing: '.08em' }}>360°</span>
+              {/* Media */}
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: 'var(--neutral-700,#404040)' }}>
+                {isYt ? (
+                  <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%' }}>
+                    <iframe
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      src={`https://www.youtube.com/embed/${ytId}`}
+                      title={img.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
                   </div>
-                </div>
-              ) : (
-                <img
-                  src={img.image_url}
-                  alt={img.title ?? ''}
-                  onClick={() => navigate('/portfolio')}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
-                />
-              )}
-              {/* ✅ FIX: Title + description overlay */}
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(transparent,rgba(0,0,0,.75))',
-                padding: '18px 8px 6px',
-                pointerEvents: 'none',
-              }}>
-                <p style={{ margin: 0, fontSize: '.65rem', color: '#fff', fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                  {img.title ?? ''}
-                </p>
-                {img.description && (
-                  <p style={{ margin: '1px 0 0', fontSize: '.57rem', color: 'rgba(255,255,255,0.65)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                    {img.description}
-                  </p>
+                ) : isPano ? (
+                  <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                    <PanoramaViewer
+                      url={img.image_url.replace('panorama:', '')}
+                      title={img.title}
+                      autoRotate={0.5}
+                      className="w-full h-full"
+                    />
+                    <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 20, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', borderRadius: 999, padding: '2px 8px', pointerEvents: 'none' }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--primary,#0F52BA)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="5" ry="10"/><path d="M2 12h20"/></svg>
+                      <span style={{ color: '#fff', fontSize: '.6rem', fontWeight: 700, letterSpacing: '.08em' }}>360°</span>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={img.image_url}
+                    alt={img.title ?? ''}
+                    onClick={() => navigate('/portfolio')}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                  />
                 )}
               </div>
+              {/* Title + description below media */}
+              {(img.title || img.description) && (
+                <div style={{ padding: '8px 10px 10px' }}>
+                  {img.title && (
+                    <p style={{ margin: 0, fontSize: '.78rem', color: '#fff', fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {img.title}
+                    </p>
+                  )}
+                  {img.description && (
+                    <p style={{ margin: '2px 0 0', fontSize: '.7rem', color: 'var(--neutral-400,#a3a3a3)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {img.description}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
