@@ -748,7 +748,7 @@ const AiCTAInner: React.FC = () => {
           <button
             className="btn-primary w-full mt-3 flex items-center justify-center gap-2"
             style={{ fontSize: '.875rem', padding: '10px' }}
-            onClick={() => navigate('/produkter')}
+            onClick={() => navigate('/products')}
           >
             Se alle vores tjenester <ArrowRight size={15} />
           </button>
