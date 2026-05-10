@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   GitBranch, Rocket, CheckCircle, XCircle, AlertTriangle,
   FileCode, SkipForward, RefreshCw, ExternalLink, Info, Clock, X, Globe,
-  PlusSquare, Tag, Layout, Plus, ShieldAlert,
+  PlusSquare, Tag, Layout, Plus, ShieldAlert, FileQuestion,
 } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
 import { getAutoDeployMsRemaining, cancelAutoDeploy } from '../../hooks/useSiteContent';
@@ -14,6 +14,7 @@ interface DeployResult {
   totalRows: number;
   deployedKeys: string[];
   skippedKeys: string[];
+  unknownKeys: string[];
   modifiedFiles: string[];
   deletedFromDB: number;
   commitSha: string | null;
@@ -441,6 +442,7 @@ const colorMap = {
   blue:   { bg: 'bg-blue-900/20',   border: 'border-blue-700/40',   text: 'text-blue-400',   badge: 'bg-blue-900/40 text-blue-300'    },
   yellow: { bg: 'bg-yellow-900/20', border: 'border-yellow-700/40', text: 'text-yellow-400', badge: 'bg-yellow-900/40 text-yellow-300' },
   amber:  { bg: 'bg-amber-900/20',  border: 'border-amber-700/40',  text: 'text-amber-400',  badge: 'bg-amber-900/40 text-amber-300'  },
+  orange: { bg: 'bg-orange-900/20', border: 'border-orange-700/40', text: 'text-orange-400', badge: 'bg-orange-900/40 text-orange-300' },
   red:    { bg: 'bg-red-900/20',    border: 'border-red-700/40',    text: 'text-red-400',    badge: 'bg-red-900/40 text-red-300'      },
 };
 
@@ -521,7 +523,7 @@ const DeployContentManager: React.FC = () => {
       }
     } catch (err: any) {
       setDeployStatus('error');
-      setDeployResult({ totalRows: 0, deployedKeys: [], skippedKeys: [], modifiedFiles: [], deletedFromDB: 0, commitSha: null, commitUrl: null, netlifyTriggered: false, errors: [err.message] });
+      setDeployResult({ totalRows: 0, deployedKeys: [], skippedKeys: [], unknownKeys: [], modifiedFiles: [], deletedFromDB: 0, commitSha: null, commitUrl: null, netlifyTriggered: false, errors: [err.message] });
       toast.error('Deploy fejlede');
     }
   };
@@ -685,6 +687,16 @@ const DeployContentManager: React.FC = () => {
               </div>
             ))}
           </div>
+          {(deployResult.unknownKeys ?? []).length > 0 && (
+            <div className="mx-5 bg-orange-900/20 border border-orange-700/40 rounded-lg px-4 py-3 flex gap-2">
+              <FileQuestion size={15} className="text-orange-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-orange-300">
+                <span className="font-semibold">{deployResult.unknownKeys.length} ukendte nøgle{deployResult.unknownKeys.length !== 1 ? 'r' : ''}</span> blev ikke fundet i kildekoden og er skrevet til{' '}
+                <code className="bg-neutral-800 px-1 rounded text-orange-200">src/content/unknown-keys.ts</code> i stedet.
+              </p>
+            </div>
+          )}
+          </div>
           <div className="px-5 pb-5 space-y-3">
             {deployResult.deployedKeys.length > 0 && (
               <Collapsible title={`Deployed nøgler (${deployResult.deployedKeys.length})`} color="green" open={!!expanded['deployed']} onToggle={() => toggle('deployed')}>
@@ -700,6 +712,17 @@ const DeployContentManager: React.FC = () => {
               <Collapsible title={`Sprunget over (${deployResult.skippedKeys.length})`} color="yellow" open={!!expanded['skipped']} onToggle={() => toggle('skipped')}>
                 <p className="text-xs text-neutral-400 mb-2"><EditableContent contentKey="deploy-content-manager-disse-noegler-er-i-databasen" fallback="Disse nøgler er i databasen men mangler i kildekoden som" /><code className="bg-neutral-800 px-1 rounded">fallback</code>.</p>
                 <TagList items={deployResult.skippedKeys} color="yellow" />
+              </Collapsible>
+            )}
+            {(deployResult.unknownKeys ?? []).length > 0 && (
+              <Collapsible title={`Ukendte nøgler (${deployResult.unknownKeys.length})`} color="orange" open={!!expanded['unknown']} onToggle={() => toggle('unknown')}>
+                <p className="text-xs text-neutral-400 mb-2">
+                  Disse nøgler er deployed og slettet fra databasen, men var ikke tilgængelige til at indsætte direkte i kildekoden.
+                  De er i stedet skrevet til{' '}
+                  <code className="bg-neutral-800 px-1 rounded">src/content/unknown-keys.ts</code>{' '}
+                  som eksporterede konstanter, og kan bruges manuelt fra den fil.
+                </p>
+                <TagList items={deployResult.unknownKeys} color="orange" />
               </Collapsible>
             )}
             {deployResult.errors.length > 0 && (
