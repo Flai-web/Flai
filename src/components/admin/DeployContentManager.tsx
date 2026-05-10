@@ -696,7 +696,6 @@ const DeployContentManager: React.FC = () => {
               </p>
             </div>
           )}
-          </div>
           <div className="px-5 pb-5 space-y-3">
             {deployResult.deployedKeys.length > 0 && (
               <Collapsible title={`Deployed nøgler (${deployResult.deployedKeys.length})`} color="green" open={!!expanded['deployed']} onToggle={() => toggle('deployed')}>
