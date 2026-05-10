@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { unknownKeysMap } from '../content/unknown-keys';
 
 // ─── Shop types (exported for use in merch/admin components) ──────────────────
 export interface ShopProduct {
@@ -201,7 +202,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const prevUserId  = useRef<string | undefined>(user?.id);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
-  const getContent     = (key: string, fallback: string = '') => siteContent[key]?.value || fallback;
+  const getContent     = (key: string, fallback: string = '') => siteContent[key]?.value || unknownKeysMap[key] || fallback;
   const getContentItem = (key: string) => siteContent[key];
   const getContentLoadingState = (_key: string): 'idle' | 'loading' | 'loaded' | 'error' => {
     return isSiteContentLoaded ? 'loaded' : 'loading';
