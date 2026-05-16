@@ -288,6 +288,19 @@ const ProductsManager: React.FC = () => {
     return { min: Math.min(...arrays), max: Math.max(...arrays) };
   }, [products]);
 
+  // Stable display order for the manager grid: shuffled once when the set of
+  // product IDs changes (add / delete), but never re-sorted while editing fields
+  // or dragging sliders, so cards don't jump around mid-edit.
+  const stableProducts = useMemo(() => {
+    const shuffled = [...products];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products.map(p => p.id).join(',')]);
+
   const emptyNew = () => ({
     name: '', description: '', price: 0,
     category: 'photo' as 'photo' | 'video',
@@ -537,7 +550,7 @@ const ProductsManager: React.FC = () => {
 
       {/* ── Products List ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {products.map((product) => {
+        {stableProducts.map((product) => {
           const productImages = toStringArray(product.images);
           const productLinks  = Array.isArray(product.links) ? product.links : [];
 
