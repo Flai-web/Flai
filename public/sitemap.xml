@@ -23,7 +23,7 @@
   <url>
     <loc>https://flai.dk/ratings</loc>
     <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.3</priority>
   </url>
 
   <url>
@@ -51,4 +51,10 @@
     <priority>0.6</priority>
   </url>
 
+    <url>
+    <loc>https://flai.dk/merch</loc>
+    <lastmod>2026-03-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>
