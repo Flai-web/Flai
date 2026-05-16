@@ -89,11 +89,11 @@ const Footer: React.FC = () => {
               fallback="Dronefoto og video i Trekantsområdet. 100% tilfredshedsgaranti."
             />
             <div className="flex space-x-4">
-              <a href="https://www.linkedin.com/in/flai-dk/" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><Linkedin size={20} /></a>
+
               <a href="https://www.facebook.com/profile.php?id=61584155103217" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><Facebook size={20} /></a>
-              <a href="https://www.instagram.com/flai.dk/" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><Instagram size={20} /></a>
+            
               <a href="https://www.youtube.com/@flai-i3j" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><Youtube size={20} /></a>
-              <a href="https://x.com/flai159?s=11" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><X size={20} /></a>
+              <a href="https://x.com/fb_flai" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors"><X size={20} /></a>
             </div>
           </div>
           
