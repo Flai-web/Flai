@@ -44,8 +44,6 @@ const DonationPage = lazy(() => import('./pages/DonationPage'));
 const SimpleRequestPage = lazy(() => import('./pages/SimpleRequestPage'));
 const MerchandisePage = lazy(() => import('./pages/MerchandisePage'));
 const FinancePage = lazy(() => import('./pages/FinancePage'));
-const Policies = lazy(() => import('./pages/Policies'));
-const Terms = lazy(() => import('./pages/Terms'));
 const DriveDownload = lazy(() => import('./components/DriveDownload'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const PanoramaViewerPage = lazy(() => import('./pages/PanoramaViewerPage'));
