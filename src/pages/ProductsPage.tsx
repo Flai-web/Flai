@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import SEO from '../components/SEO';
 import ProductCard, { ProductCardSkeleton } from '../components/ProductCard';
 import { Camera, Video } from 'lucide-react';
@@ -13,19 +13,6 @@ const ProductsPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<'all' | 'video' | 'photo'>('all');
   const { setPageLoading } = useLoading();
 
-  const productKey = products.map(p => `${p.id}:${p.array ?? 0}`).join(',');
-
-  const productScores = useMemo(() => {
-    if (products.length === 0) return new Map<number, number>();
-    const map = new Map<number, number>();
-    products.forEach(p => {
-      const weight = Math.max(p.array ?? 1, 1);
-      map.set(p.id, Math.random() ** (1 / weight));
-    });
-    return map;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productKey]);
-
   useEffect(() => {
     setPageLoading(loading);
   }, [loading, setPageLoading]);
@@ -35,11 +22,7 @@ const ProductsPage: React.FC = () => {
       if (activeCategory === 'all') return true;
       return product.category === activeCategory;
     })
-    .sort((a, b) => {
-      const scoreA = productScores.get(a.id) ?? 0;
-      const scoreB = productScores.get(b.id) ?? 0;
-      return scoreB - scoreA;
-    });
+    .sort((a, b) => (b.array ?? 0) - (a.array ?? 0));
 
   return (
     <div className="pt-20 pb-16">
