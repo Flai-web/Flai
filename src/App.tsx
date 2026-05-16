@@ -92,8 +92,6 @@ function SiteShell() {
           <Route path="/update-password" element={<UpdatePasswordPage />} />
           <Route path="/email-confirmed" element={<EmailConfirmedPage />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/policies" element={<Policies />} />
           <Route path="/coverage" element={<CoverageAreasPage />} />
           <Route path="/unsubscribe" element={<UnsubscribePage />} />
           <Route path="/simple-request" element={<SimpleRequestPage />} />
