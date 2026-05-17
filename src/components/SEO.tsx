@@ -97,7 +97,7 @@ const SEO: React.FC<SEOProps> = ({
   // Description is always driven by PAGE_SUBTITLE_MAP for known pages.
   // For any page not in the map, DEFAULT_DESCRIPTION is used — no description
   // prop from any page component can override this.
-  const subtitleEntry = canonical ? PAGE_SUBTITLE_MAP[canonical] : undefined;
+  const subtitleEntry = PAGE_SUBTITLE_MAP[canonical ?? location.pathname];
   const resolvedDescription = subtitleEntry
     ? getContent(subtitleEntry.key, subtitleEntry.fallback)
     : DEFAULT_DESCRIPTION;
@@ -105,7 +105,11 @@ const SEO: React.FC<SEOProps> = ({
   const fullTitle = title
     ? `Flai - ${title} - Dronefoto og video i Trekantsområdet - En ny verden`
     : `Flai - Dronefoto og video i Trekantsområdet - En ny verden`;
-  const canonicalUrl = canonical ? `${BASE_URL}${canonical}` : BASE_URL;
+  // Use the explicit canonical prop when provided; otherwise derive from the
+  // current pathname so every page gets its own correct canonical URL instead
+  // of falling back to the homepage.
+  const canonicalPath = canonical ?? location.pathname;
+  const canonicalUrl = canonicalPath === '/' ? BASE_URL : `${BASE_URL}${canonicalPath}`;
 
   useEffect(() => {
     document.title = fullTitle;
