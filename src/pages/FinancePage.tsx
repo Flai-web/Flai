@@ -446,7 +446,13 @@ export default function FinancePage() {
 
               {/* Stat grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Brutto-omsætning"  value={fmt(stripe.summary.total_revenue)}    icon={DollarSign}   color="text-green-400" />
+                <StatCard
+                  label={`Brutto-omsætning (${spanLabel})`}
+                  value={fmtDKK(stripe.summary.total_revenue / 100 + manualPayments + manualIncome)}
+                  sub={`Stripe: ${fmt(stripe.summary.total_revenue)}`}
+                  icon={DollarSign}
+                  color="text-green-400"
+                />
                 <StatCard label="Refunderinger"      value={fmt(stripe.summary.total_refunds)}    icon={TrendingDown} color="text-red-400" />
                 <StatCard
                   label="Transaktioner"
@@ -455,7 +461,17 @@ export default function FinancePage() {
                   icon={ShoppingCart} color="text-primary"
                 />
                 <StatCard label="Nye kunder"         value={String(stripe.summary.new_customers)} icon={Users}        color="text-blue-400" />
-                <StatCard label="Konverteringsrate"   value={`${stripe.summary.conversion_rate}%`} icon={Percent}     color="text-purple-400" />
+                <StatCard
+                  label={`Konverteringsrate (${spanLabel})`}
+                  value={(() => {
+                    const nettoOmsaetning = stripe.summary.net_revenue / 100 + manualPayments + manualIncome;
+                    if (nettoOmsaetning === 0) return '0%';
+                    return `${Math.round((netProfit / nettoOmsaetning) * 100)}%`;
+                  })()}
+                  sub="Netto-profit / Netto-omsætning"
+                  icon={Percent}
+                  color="text-purple-400"
+                />
                 <StatCard label={`Egne udgifter (${spanLabel})`}   value={fmtDKK(manualExpenses)}              icon={CreditCard} color="text-red-300" />
                 <StatCard label={`Manuel indkomst (${spanLabel})`} value={fmtDKK(manualIncome + manualPayments)} icon={Banknote}   color="text-yellow-300" />
                 <StatCard
