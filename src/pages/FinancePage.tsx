@@ -429,11 +429,11 @@ export default function FinancePage() {
                   </div>
                   <div>
                     <p className="text-xs text-neutral-500"><EditableContent contentKey="finance-page-netto-omsaetning" fallback="Netto-omsætning (" />{spanLabel})</p>
-                    <p className="text-xl font-bold text-primary">{fmt(stripe.summary.net_revenue)}</p>
+                    <p className="text-xl font-bold text-primary">{fmtDKK(stripe.summary.net_revenue / 100 + manualPayments + manualIncome)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-neutral-500"><EditableContent contentKey="finance-page-manuel-betalinger-2" fallback="Manuel betalinger (" />{spanLabel})</p>
-                    <p className="text-xl font-bold text-yellow-300">{fmtDKK(manualPayments)}</p>
+                    <p className="text-xl font-bold text-yellow-300">{fmtDKK(manualPayments + manualIncome)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-neutral-500"><EditableContent contentKey="finance-page-beregnet-netto-profit" fallback="Beregnet Netto-profit (" />{spanLabel})</p>
