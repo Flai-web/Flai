@@ -185,7 +185,8 @@ export default function FinancePage() {
   const [stripeLoading, setStripeLoading] = useState(false);
   const [stripeError, setStripeError]     = useState<string | null>(null);
 
-  const [months, setMonths] = useState<number | 'all'>(12);
+  const [months, setMonths] = useState<number | 'all' | 'custom'>(12);
+  const [customFrom, setCustomFrom] = useState<string>(''); // YYYY-MM-DD
 
   const [rows, setRows]               = useState<FinanceRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
@@ -201,7 +202,10 @@ export default function FinancePage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const query = months === 'all' ? 'all=true' : `months=${months}`;
+      const query =
+        months === 'all'    ? 'all=true' :
+        months === 'custom' ? (customFrom ? `from=${customFrom}` : 'all=true') :
+        `months=${months}`;
       const res = await fetch(
         `${SUPABASE_URL}/functions/v1/get-stripe-finance?${query}`,
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
@@ -216,7 +220,7 @@ export default function FinancePage() {
     } finally {
       setStripeLoading(false);
     }
-  }, [months]);
+  }, [months, customFrom]);
 
   // ── Fetch finance_data rows ────────────────────────────────────────────────
   const fetchRows = useCallback(async () => {
@@ -236,6 +240,13 @@ export default function FinancePage() {
   // ── Filter rows by timespan ────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
     if (months === 'all') return rows;
+    if (months === 'custom') {
+      if (!customFrom) return rows;
+      return rows.filter(r => {
+        if (!r.month) return true;
+        return r.month.slice(0, 10) >= customFrom;
+      });
+    }
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - months);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -243,7 +254,7 @@ export default function FinancePage() {
       if (!r.month) return true;
       return r.month.slice(0, 10) >= cutoffStr;
     });
-  }, [rows, months]);
+  }, [rows, months, customFrom]);
 
   // ── Computed totals (all from filteredRows for consistency) ────────────────
   const manualExpenses = filteredRows
@@ -315,12 +326,13 @@ export default function FinancePage() {
     fetchRows();
   };
 
-  const spanLabel = months === 'all'
-    ? 'alle tider'
-    : months === 1 ? 'seneste måned'
-    : months === 12 ? 'seneste 12 mdr.'
-    : months === 24 ? 'seneste 2 år'
-    : `seneste ${months} mdr.`;
+  const spanLabel =
+    months === 'all'    ? 'alle tider' :
+    months === 'custom' ? (customFrom ? `fra ${new Date(customFrom).toLocaleDateString('da-DK')}` : 'alle tider') :
+    months === 1  ? 'seneste måned' :
+    months === 12 ? 'seneste 12 mdr.' :
+    months === 24 ? 'seneste 2 år' :
+    `seneste ${months} mdr.`;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -341,7 +353,10 @@ export default function FinancePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={months}
-                onChange={e => setMonths(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                onChange={e => {
+                  const v = e.target.value;
+                  setMonths(v === 'all' ? 'all' : v === 'custom' ? 'custom' : Number(v));
+                }}
                 className="bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
               >
                 <option value={1}><EditableContent contentKey="finance-page-seneste-maaned" fallback="Seneste måned" /></option>
@@ -350,7 +365,20 @@ export default function FinancePage() {
                 <option value={12}><EditableContent contentKey="finance-page-seneste-12-mdr" fallback="Seneste 12 mdr." /></option>
                 <option value={24}><EditableContent contentKey="finance-page-seneste-2-aar" fallback="Seneste 2 år" /></option>
                 <option value="all"><EditableContent contentKey="finance-page-alle-tider" fallback="Alle tider" /></option>
+                <option value="custom">Vælg dato…</option>
               </select>
+              {months === 'custom' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-neutral-400 whitespace-nowrap">Fra dato</span>
+                  <input
+                    type="date"
+                    value={customFrom}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setCustomFrom(e.target.value)}
+                    className="bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary [color-scheme:dark]"
+                  />
+                </div>
+              )}
               <button
                 onClick={fetchStripe}
                 disabled={stripeLoading}
